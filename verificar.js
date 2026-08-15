@@ -441,7 +441,7 @@ test('navegando, no corre el refresco de planificacion', () => {
 test('salir del viaje libera GPS, voz y pantalla', () => {
   const f = js.match(/function terminarViaje\([\s\S]*?\n\}/)[0];
   assert.ok(/clearWatch/.test(f), 'queda el GPS prendido comiendo bateria');
-  assert.ok(/speechSynthesis\.cancel/.test(f), 'queda hablando');
+  assert.ok(/callarVoz\(\)/.test(f), 'queda hablando');
   assert.ok(/mantenerPantalla\(false\)/.test(f), 'queda la pantalla encendida');
 });
 
@@ -538,7 +538,9 @@ test('se puede elegir entre las voces del telefono', () => {
   const f = js.match(/function cargarVoces\(\)[\s\S]*?\n\}/)[0];
   assert.ok(/filter\(v => \/\^es\/i\.test\(v\.lang\)\)/.test(f),
     'tiene que ofrecer todas las voces en español, no solo una');
-  assert.ok(/sort\(/.test(f), 'las rioplatenses deberian ir primero');
+  const o = js.match(/function ordenarVoces\(vs\)[\s\S]*?\n\}/)[0];
+  assert.ok(/sort\(/.test(o), 'las rioplatenses deberian ir primero');
+  assert.ok(/vistas\.has/.test(o), 'Android repite la misma voz por cada motor');
   assert.ok(/localStorage\.getItem\('tt_vozNombre'\)/.test(js),
     'la voz elegida tiene que sobrevivir al cierre de la app');
 });
@@ -750,13 +752,34 @@ test('el vehiculo elegido se ve sin reiniciar el viaje', () => {
   assert.ok(/localStorage\.setItem\('tt_vehiculo'/.test(f), 'no se recuerda la eleccion');
 });
 
+test('la voz no depende de la Web Speech API', () => {
+  // Diagnostico corregido: el WebView de Android NO implementa speechSynthesis.
+  // No es que devuelva la lista vacia; el objeto no existe. Por eso la app
+  // hablaba en la computadora y estaba muda en el telefono.
+  assert.ok(/plugin\('TextToSpeech'\)/.test(js), 'falta el motor nativo');
+  const f = js.match(/function hablarSistema\(texto\)[\s\S]*?\n\}/)[0];
+  const nativo = f.indexOf('ttsNativo');
+  const web = f.indexOf('SpeechSynthesisUtterance');
+  assert.ok(nativo > 0 && web > 0, 'tienen que estar los dos caminos');
+  assert.ok(nativo < web, 'en el telefono manda el motor de Android');
+});
+
 test('siempre se puede elegir alguna voz', () => {
-  // En el WebView de Android getVoices() devuelve vacio aunque speak() ande.
-  // Sin este respaldo la app decia "No hay voces disponibles" en un telefono
-  // que hablaba perfecto.
   const f = js.match(/function vocesOfrecidas\(\)[\s\S]*?\n\}/)[0];
-  assert.ok(/vocesEs\.length \? vocesEs : \[VOZ_SISTEMA\]/.test(f),
-    'sin voces enumerables la app se queda muda');
+  assert.ok(/hayWebSpeech\(\) \|\| esNativo\(\) \|\| !ttsRevisado/.test(f),
+    'dentro del APK diria "no hay voces" antes de preguntarle a Android');
+});
+
+test('cortar la voz sirve para los dos motores', () => {
+  const f = js.match(/function callarVoz\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/TTS, 'stop'/.test(f), 'el motor nativo sigue hablando');
+  assert.ok(/speechSynthesis\.cancel/.test(f), 'el del navegador sigue hablando');
+});
+
+test('el plugin de voz esta declarado como dependencia', () => {
+  const pkg = JSON.parse(fs.readFileSync(__dirname + '/package.json', 'utf8'));
+  assert.ok(pkg.dependencies['@capacitor-community/text-to-speech'],
+    'sin la dependencia, registerPlugin devuelve un proxy que revienta al usarlo');
 });
 
 test('nada se usa antes de declararse', () => {
@@ -766,6 +789,88 @@ test('nada se usa antes de declararse', () => {
   const uso = js.indexOf('cargarVoces();');
   assert.ok(decl > 0 && uso > 0);
   assert.ok(decl < uso, 'VOZ_FEM se declara despues de que cargarVoces() lo necesito');
+});
+
+test('el panel de resultados se puede plegar', () => {
+  // Desplegado tapa media pantalla justo cuando queres mirar la ruta.
+  assert.ok(/id="grab"/.test(html), 'la manija tiene que ser un boton, no un div');
+  assert.ok(/#panel\.min/.test(html), 'falta el estado plegado en el CSS');
+  const f = js.match(/function plegarPanel\(min\)[\s\S]*?\n\}/)[0];
+  assert.ok(/invalidateSize/.test(f),
+    'sin esto el mapa queda encuadrado para el alto viejo');
+  assert.ok(/fitBounds/.test(f), 'la ruta tiene que reencuadrarse al ganar espacio');
+});
+
+test('la manija distingue un toque de un arrastre', () => {
+  const f = js.slice(js.indexOf('function activarManija'),
+                     js.indexOf('function refresh()'));
+  assert.ok(f.length > 200, 'no se encontro la funcion');
+  assert.ok(/Math\.abs\(movido\) < 12/.test(f),
+    'sin umbral, cualquier temblor del dedo cuenta como arrastre');
+  assert.ok(/pointerdown/.test(f) && /pointerup/.test(f),
+    'pointer events y no touch: asi anda igual con mouse y con dedo');
+});
+
+test('la manija se conecta al arrancar', () => {
+  assert.ok(/function start\(\)\s*\{\s*activarManija\(\);/.test(js),
+    'el boton existiria pero no haria nada');
+});
+
+test('los peajes de una misma plaza cuentan como uno', () => {
+  // OpenStreetMap mapea cada casilla por separado: una plaza de seis carriles
+  // son seis nodos. Sin agrupar, un peaje se ve como tres. Paso.
+  const f = js.match(/function agruparPeajes\([\s\S]*?\n\}/)[0];
+  const agrupar = new Function('return ' + f.replace('function agruparPeajes', 'function'))();
+  const plaza = [{ offset: 1000 }, { offset: 1030 }, { offset: 1075 }];
+  const otra = [{ offset: 9000 }, { offset: 9040 }];
+  assert.strictEqual(agrupar([...plaza, ...otra]).length, 2);
+  assert.deepStrictEqual(agrupar([...plaza, ...otra]).map(p => p.offset), [1000, 9000]);
+});
+
+test('el punteado amarillo del peaje ya no se dibuja', () => {
+  assert.ok(!/dashArray: '2 13'/.test(js), 'volvio el rayado sobre la ruta');
+  assert.ok(/tramosPeaje/.test(js), 'el dato se sigue guardando por las dudas');
+});
+
+test('te ves en el mapa antes de buscar nada', () => {
+  const f = js.match(/function pintarMiUbicacion\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/NAV\.on/.test(f), 'navegando, el punto se pisa con el vehiculo');
+  assert.ok(/marcadorYo/.test(js) && !/S\.markers\.push\(marcadorYo/.test(js),
+    'si entra en S.markers, el proximo draw() lo borra');
+  assert.ok(/pintarMiUbicacion\(\);\n    if \(S\.to\) route\(\);/.test(js)
+         || /pintarMiUbicacion\(\)/.test(js.slice(js.indexOf('async function locate'),
+                                                   js.indexOf('$(\'gpsBtn\')'))),
+    'al ubicarse no se pinta');
+});
+
+test('tocar el mapa pone el destino', () => {
+  const f = js.match(/function conectarToquesDelMapa\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/map\.on\('click'/.test(f), 'falta el toque simple');
+  assert.ok(/map\.on\('contextmenu'/.test(f),
+    'sin mantener apretado no hay forma de cambiar el destino con una ruta puesta');
+  assert.ok(/if \(S\.routes\.length\) return;/.test(f),
+    'con ruta dibujada el toque simple sirve para elegir alternativa: chocarian');
+  assert.ok((f.match(/if \(NAV\.on\) return;/g) || []).length === 2,
+    'manejando, un toque al mapa no puede cambiarte el destino');
+});
+
+test('el destino del mapa no espera al nombre de la calle', () => {
+  const f = js.match(/async function destinoDesdeMapa[\s\S]*?\n\}/)[0];
+  assert.ok(f.indexOf('irA(punto)') < f.indexOf('await reverse'),
+    'la ruta tiene que salir ya; el nombre puede llegar despues');
+});
+
+test('el manifiesto declara que abrimos ubicaciones compartidas', () => {
+  const w = fs.readFileSync(__dirname + '/.github/workflows/build-apk.yml', 'utf8');
+  assert.ok(/herramientas\/intent-filters\.py/.test(w),
+    'sin este paso la app no aparece en "Abrir con"');
+  const py = fs.readFileSync(__dirname + '/herramientas/intent-filters.py', 'utf8');
+  for (const h of ['maps.app.goo.gl', 'goo.gl', 'maps.google.com', '"geo"']) {
+    assert.ok(py.includes(h), 'falta el formato ' + h);
+  }
+  // El proyecto android/ se regenera en cada build: el script tiene que poder
+  // correr dos veces sin duplicar los filtros.
+  assert.ok(/if 'maps\.app\.goo\.gl' in m:/.test(py), 'no es idempotente');
 });
 
 test('no hay bloques de codigo duplicados', () => {

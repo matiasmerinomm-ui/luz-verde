@@ -14,7 +14,8 @@
     "@capacitor/android": "^6.2.0",
     "@capacitor/app": "^6.0.2",
     "@capacitor/core": "^6.2.0",
-    "@capacitor/geolocation": "^6.1.0"
+    "@capacitor/geolocation": "^6.1.0",
+    "@capacitor-community/text-to-speech": "^5.0.0"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
