@@ -1,0 +1,90 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Traer el codigo
+        uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Inyectar la API Key desde el secreto
+        env:
+          TOMTOM_KEY: ${{ secrets.TOMTOM_KEY }}
+        run: |
+          if [ -n "$TOMTOM_KEY" ]; then
+            sed -i "s|const KEY_EMBEBIDA = '[^']*'|const KEY_EMBEBIDA = '$TOMTOM_KEY'|" www/index.html
+            echo "Clave tomada del secreto del repositorio."
+          else
+            echo "Sin secreto TOMTOM_KEY: se usa la clave del archivo."
+          fi
+
+      - name: Correr los tests
+        run: |
+          node verificar.js
+          node verificar-nav.js
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Generar el proyecto Android
+        run: npx cap add android
+
+      - name: Generar iconos y splash
+        run: npx capacitor-assets generate --android
+        continue-on-error: true
+
+      - name: Sincronizar la app web
+        run: npx cap sync android
+
+      - name: Compilar el APK
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Renombrar
+        run: |
+          mkdir -p salida
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             salida/luz-verde-v${{ github.run_number }}.apk
+          ls -lh salida/
+
+      - name: Subir como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: luz-verde-apk
+          path: salida/*.apk
+          retention-days: 30
+
+      - name: Publicar Release descargable
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Luz Verde v${{ github.run_number }}
+          body: |
+            APK listo para instalar en Android. Toca el archivo .apk de abajo
+            desde el celular y aceptale a Android instalar de esta fuente.
+          files: salida/*.apk
