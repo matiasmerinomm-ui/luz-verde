@@ -75,7 +75,18 @@ const ENTORNOS = {
   apkPelado: capacitorFalso(['Geolocation']),
   apkCompleto: capacitorFalso(['Geolocation', 'App', 'CapacitorHttp']),
 };
-global.window = { addEventListener(){}, Capacitor: ENTORNOS[escenario] };
+/**
+ * `window` tiene que tener TODO lo que el navegador pone ahí.
+ *
+ * La app pregunta cosas como `'speechSynthesis' in window` antes de usar una
+ * API. Si el simulador define la API como global pero no la cuelga de window,
+ * esa rama nunca se ejecuta y el test da verde con la app rota. Pasó
+ * exactamente eso: un error de inicialización quedó sin detectar.
+ */
+global.window = {
+  addEventListener(){}, removeEventListener(){},
+  Capacitor: ENTORNOS[escenario],
+};
 global.navigator = { geolocation: { getCurrentPosition(){}, watchPosition(){ return 1; }, clearWatch(){} }, wakeLock: undefined };
 global.localStorage = { _d:{}, getItem(k){ return this._d[k] ?? null; }, setItem(k,v){ this._d[k]=v; }, removeItem(k){ delete this._d[k]; } };
 global.history = { pushState(){} };
@@ -95,6 +106,13 @@ global.L = {
   divIcon: () => ({}), latLngBounds: () => ({ pad(){ return this; } }),
   control: { zoom: () => ({ addTo(){} }) },
 };
+
+// Reflejar en window todo lo que el navegador expone ahí.
+for (const k of ['navigator', 'localStorage', 'history', 'fetch', 'Audio',
+                 'speechSynthesis', 'SpeechSynthesisUtterance', 'document',
+                 'requestAnimationFrame', 'setTimeout', 'setInterval', 'L']) {
+  global.window[k] = global[k];
+}
 
 const bloques = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
 let n = 0;

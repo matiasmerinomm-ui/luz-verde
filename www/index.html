@@ -1722,6 +1722,84 @@ const MARCADOR_SVG = `<div class="veh"><svg viewBox="0 0 76 76">
   <path d="M38 35 L31 49 L38 45.6 L45 49 Z" fill="#ffffff"/>
 </svg></div>`;
 
+/* ============================================================
+   Voz propia — banco de frases grabadas
+   ============================================================
+   La app arma cada indicación encadenando dos audios: la distancia y la
+   maniobra. "En 300 metros" + "girá a la izquierda".
+
+   Los nombres de calles no se dicen nunca: el vocabulario grabado es finito y
+   las calles no. Van en pantalla, como en los GPS de tablero. Es una pérdida
+   menor a cambio de que la voz suene bien.
+
+   Si falta cualquier audio, esa frase la dice la voz de Android. Nunca te
+   quedás sin aviso por un archivo que no esté.
+   ============================================================ */
+const VOZ_DIR = 'voz/';
+let clipsBanco = null;              // nombres de clip que declara el manifiesto
+let paquetes = [];                  // paquetes de voz efectivamente presentes
+let paqueteVoz = localStorage.getItem('tt_paquete') || '';   // '' = voz de Android
+
+/** Escala fija de distancias habladas. Cada valor es un archivo. */
+const CUBOS_DIST = [30, 50, 100, 150, 200, 300, 400, 500, 700, 900,
+                    1000, 1500, 2000, 3000, 5000, 8000, 12000, 20000];
+
+function cuboDistancia(m) {
+  if (m < 25) return null;                // "ahora"
+  let mejor = CUBOS_DIST[0];
+  for (const c of CUBOS_DIST) if (Math.abs(c - m) < Math.abs(mejor - m)) mejor = c;
+  return 'd-' + mejor;
+}
+
+/** Maniobra de TomTom -> clip. Lo que no está mapeado cae en "seguí derecho". */
+const CLIP_MANIOBRA = {
+  TURN_LEFT: 'm-izq', TURN_RIGHT: 'm-der',
+  SHARP_LEFT: 'm-izq-fuerte', SHARP_RIGHT: 'm-der-fuerte',
+  BEAR_LEFT: 'm-izq-suave', BEAR_RIGHT: 'm-der-suave',
+  KEEP_LEFT: 'm-izq-manten', KEEP_RIGHT: 'm-der-manten',
+  STRAIGHT: 'm-derecho', DEPART: 'm-derecho', FOLLOW: 'm-derecho',
+  MAKE_UTURN: 'm-u', TRY_MAKE_UTURN: 'm-u', ROUNDABOUT_BACK: 'm-u',
+  TAKE_EXIT: 'm-salida',
+  MOTORWAY_EXIT_LEFT: 'm-salida-izq', MOTORWAY_EXIT_RIGHT: 'm-salida-der',
+  TAKE_FERRY: 'm-balsa',
+  ARRIVE: 'm-llegada', ARRIVE_LEFT: 'm-llegada', ARRIVE_RIGHT: 'm-llegada',
+};
+
+/**
+ * Descubre qué paquetes de voz están realmente cargados.
+ *
+ * No alcanza con leer el manifiesto: declara los tres paquetes siempre, pero
+ * las carpetas pueden estar vacías. Se prueba un audio de cada uno; el que
+ * responde, existe. Así la lista muestra solo lo que de verdad suena.
+ */
+async function cargarBancoVoz() {
+  let man;
+  try {
+    const r = await fetch(VOZ_DIR + 'manifiesto.json', { cache: 'no-cache' });
+    if (!r.ok) return;
+    man = await r.json();
+  } catch (_) { return; }
+  if (!Array.isArray(man.clips) || !man.clips.length) return;
+
+  clipsBanco = new Set(man.clips);
+  const sonda = man.sonda || man.clips[0];
+
+  const presentes = await Promise.all((man.paquetes || []).map(pq =>
+    new Promise(res => {
+      const a = new Audio(`${VOZ_DIR}${pq.id}/${sonda}.mp3`);
+      a.oncanplaythrough = () => res(pq);
+      a.onerror = () => res(null);
+      a.preload = 'auto';
+      a.load();
+      setTimeout(() => res(null), 4000);   // sin respuesta = no está
+    })));
+
+  paquetes = presentes.filter(Boolean);
+  if (paqueteVoz && !paquetes.some(p => p.id === paqueteVoz)) paqueteVoz = '';
+  pintarSelectorVoz();
+}
+cargarBancoVoz();
+
 /* -- voz ------------------------------------------------------------------ */
 
 let vozEs = null;
@@ -1812,83 +1890,6 @@ function pintarSelectorVoz() {
 
 
 
-/* ============================================================
-   Voz propia — banco de frases grabadas
-   ============================================================
-   La app arma cada indicación encadenando dos audios: la distancia y la
-   maniobra. "En 300 metros" + "girá a la izquierda".
-
-   Los nombres de calles no se dicen nunca: el vocabulario grabado es finito y
-   las calles no. Van en pantalla, como en los GPS de tablero. Es una pérdida
-   menor a cambio de que la voz suene bien.
-
-   Si falta cualquier audio, esa frase la dice la voz de Android. Nunca te
-   quedás sin aviso por un archivo que no esté.
-   ============================================================ */
-const VOZ_DIR = 'voz/';
-let clipsBanco = null;              // nombres de clip que declara el manifiesto
-let paquetes = [];                  // paquetes de voz efectivamente presentes
-let paqueteVoz = localStorage.getItem('tt_paquete') || '';   // '' = voz de Android
-
-/** Escala fija de distancias habladas. Cada valor es un archivo. */
-const CUBOS_DIST = [30, 50, 100, 150, 200, 300, 400, 500, 700, 900,
-                    1000, 1500, 2000, 3000, 5000, 8000, 12000, 20000];
-
-function cuboDistancia(m) {
-  if (m < 25) return null;                // "ahora"
-  let mejor = CUBOS_DIST[0];
-  for (const c of CUBOS_DIST) if (Math.abs(c - m) < Math.abs(mejor - m)) mejor = c;
-  return 'd-' + mejor;
-}
-
-/** Maniobra de TomTom -> clip. Lo que no está mapeado cae en "seguí derecho". */
-const CLIP_MANIOBRA = {
-  TURN_LEFT: 'm-izq', TURN_RIGHT: 'm-der',
-  SHARP_LEFT: 'm-izq-fuerte', SHARP_RIGHT: 'm-der-fuerte',
-  BEAR_LEFT: 'm-izq-suave', BEAR_RIGHT: 'm-der-suave',
-  KEEP_LEFT: 'm-izq-manten', KEEP_RIGHT: 'm-der-manten',
-  STRAIGHT: 'm-derecho', DEPART: 'm-derecho', FOLLOW: 'm-derecho',
-  MAKE_UTURN: 'm-u', TRY_MAKE_UTURN: 'm-u', ROUNDABOUT_BACK: 'm-u',
-  TAKE_EXIT: 'm-salida',
-  MOTORWAY_EXIT_LEFT: 'm-salida-izq', MOTORWAY_EXIT_RIGHT: 'm-salida-der',
-  TAKE_FERRY: 'm-balsa',
-  ARRIVE: 'm-llegada', ARRIVE_LEFT: 'm-llegada', ARRIVE_RIGHT: 'm-llegada',
-};
-
-/**
- * Descubre qué paquetes de voz están realmente cargados.
- *
- * No alcanza con leer el manifiesto: declara los tres paquetes siempre, pero
- * las carpetas pueden estar vacías. Se prueba un audio de cada uno; el que
- * responde, existe. Así la lista muestra solo lo que de verdad suena.
- */
-async function cargarBancoVoz() {
-  let man;
-  try {
-    const r = await fetch(VOZ_DIR + 'manifiesto.json', { cache: 'no-cache' });
-    if (!r.ok) return;
-    man = await r.json();
-  } catch (_) { return; }
-  if (!Array.isArray(man.clips) || !man.clips.length) return;
-
-  clipsBanco = new Set(man.clips);
-  const sonda = man.sonda || man.clips[0];
-
-  const presentes = await Promise.all((man.paquetes || []).map(pq =>
-    new Promise(res => {
-      const a = new Audio(`${VOZ_DIR}${pq.id}/${sonda}.mp3`);
-      a.oncanplaythrough = () => res(pq);
-      a.onerror = () => res(null);
-      a.preload = 'auto';
-      a.load();
-      setTimeout(() => res(null), 4000);   // sin respuesta = no está
-    })));
-
-  paquetes = presentes.filter(Boolean);
-  if (paqueteVoz && !paquetes.some(p => p.id === paqueteVoz)) paqueteVoz = '';
-  pintarSelectorVoz();
-}
-cargarBancoVoz();
 
 function hayBanco() { return !!paqueteVoz && !!clipsBanco; }
 
