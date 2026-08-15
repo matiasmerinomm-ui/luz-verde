@@ -27,6 +27,15 @@ const src = ['fmtDur', 'fmtDist', 'fmtClock', 'isoLocal', 'parseRoute']
 eval(src + '\nglobalThis._f = {fmtDur, fmtDist, fmtClock, isoLocal, parseRoute};');
 const F = globalThis._f;
 
+/* Haversine, para los tests que necesitan distancias reales. */
+function distanciaReal(a, b) {
+  const R = 6371000, r = Math.PI / 180;
+  const dLa = (b[0] - a[0]) * r, dLo = (b[1] - a[1]) * r;
+  const x = Math.sin(dLa / 2) ** 2
+          + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLo / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
 let pasaron = 0, fallaron = 0;
 function test(nombre, fn) {
   try { fn(); console.log('  ok    ' + nombre); pasaron++; }
@@ -819,12 +828,22 @@ test('la manija se conecta al arrancar', () => {
 test('los peajes de una misma plaza cuentan como uno', () => {
   // OpenStreetMap mapea cada casilla por separado: una plaza de seis carriles
   // son seis nodos. Sin agrupar, un peaje se ve como tres. Paso.
-  const f = js.match(/function agruparPeajes\([\s\S]*?\n\}/)[0];
-  const agrupar = new Function('return ' + f.replace('function agruparPeajes', 'function'))();
-  const plaza = [{ offset: 1000 }, { offset: 1030 }, { offset: 1075 }];
-  const otra = [{ offset: 9000 }, { offset: 9040 }];
-  assert.strictEqual(agrupar([...plaza, ...otra]).length, 2);
-  assert.deepStrictEqual(agrupar([...plaza, ...otra]).map(p => p.offset), [1000, 9000]);
+  const agrupar = new Function('distancia',
+    js.match(/(function agruparPeajes\([\s\S]*?\n\})/)[1] + '\nreturn agruparPeajes;')
+    (F.distancia || distanciaReal);
+
+  // Una plaza: seis casillas a metros una de otra, misma coordenada gruesa.
+  const plaza = [[-34.5000, -58.6000], [-34.5001, -58.6001], [-34.5002, -58.6003]];
+  // La cabina de la mano contraria, a 40 m: es la MISMA plaza.
+  const contraria = [[-34.50035, -58.60005]];
+  // Y una plaza de verdad distinta, a varios kilómetros.
+  const lejos = [[-34.5400, -58.6400]];
+  const arma = (ll, i) => ({ lat: ll[0], lon: ll[1], offset: i * 137 });
+  const todas = [...plaza, ...contraria, ...lejos].map(arma);
+
+  const r = agrupar(todas);
+  assert.strictEqual(r.length, 2,
+    'quedaron ' + r.length + ' peajes donde hay 2 plazas');
 });
 
 test('el punteado amarillo del peaje ya no se dibuja', () => {
@@ -871,6 +890,57 @@ test('el manifiesto declara que abrimos ubicaciones compartidas', () => {
   // El proyecto android/ se regenera en cada build: el script tiene que poder
   // correr dos veces sin duplicar los filtros.
   assert.ok(/if 'maps\.app\.goo\.gl' in m:/.test(py), 'no es idempotente');
+});
+
+test('la voz dice por que no suena', () => {
+  // Dos arreglos a ciegas y dos diagnosticos equivocados: llamarPlugin se
+  // traga los errores del plugin. Sin este texto seguimos adivinando.
+  assert.ok(/let diagVoz = /.test(js), 'falta el diagnostico');
+  const f = js.match(/function cargarVocesNativas\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/\.catch\(/.test(f), 'un rechazo del plugin se pierde en silencio');
+  assert.ok(!/llamarPlugin\(TTS, 'getSupportedVoices'\)/.test(js),
+    'llamarPlugin borra el motivo del error justo donde hace falta');
+  const sel = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/diagVoz/.test(sel), 'el diagnostico no se ve en ningun lado');
+});
+
+test('hablar reintenta con otro idioma antes de rendirse', () => {
+  // es-AR no viene instalado en todos los telefonos aunque es-ES si. Con un
+  // solo intento, el motor rechaza y la app se queda muda sin decir nada.
+  const f = js.match(/function hablarNativo\(texto\)[\s\S]*?\n\}/)[0];
+  assert.ok(/'es-ES'/.test(f) && /'es-US'/.test(f), 'faltan idiomas de respaldo');
+  assert.ok(/probar\(i \+ 1\)/.test(f), 'no encadena los intentos');
+  assert.ok(/intentos\.push\(\{\}\)|, \{\}\)/.test(f),
+    'falta el ultimo intento sin idioma, que es el que casi siempre anda');
+});
+
+test('se intenta hablar aunque no se puedan enumerar las voces', () => {
+  const f = js.match(/function hablarSistema\(texto\)[\s\S]*?\n\}/)[0];
+  assert.ok(/ttsNativo \|\| esNativo\(\)/.test(f),
+    'que no sepamos listar las voces no significa que no sepa hablar');
+});
+
+test('un link pegado con el teclado de Android tambien se lee', () => {
+  // Pegar desde la barra de sugerencias no dispara el evento paste: el texto
+  // aparece en el campo y no pasa nada. Asi quedaba el link escrito y sin ruta.
+  assert.ok(/toInput'\)\.addEventListener\('input'/.test(js),
+    'solo se escucha paste, que en Android no siempre llega');
+  const f = js.match(/async function atenderTextoDestino[\s\S]*?\n\}/)[0];
+  assert.ok(/leyendoEnlace/.test(f), 'sin candado, cada tecla dispara una consulta');
+});
+
+test('si el enlace corto falla, se dice por que', () => {
+  const f = js.match(/async function expandirEnlaceCorto[\s\S]*?\n\}/)[0];
+  assert.ok((f.match(/diagEnlace = /g) || []).length >= 3,
+    'hay caminos de falla que no explican nada');
+});
+
+test('los recientes aparecen al buscar destino, no antes', () => {
+  const f = js.match(/function pintarRecientes\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/!buscandoDestino/.test(f), 'la lista ocupa pantalla sin que la pidas');
+  const c = js.match(/function conectarFocoDestino\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/setTimeout/.test(c),
+    'sin demora en el blur, el toque nunca llega al reciente elegido');
 });
 
 test('no hay bloques de codigo duplicados', () => {
