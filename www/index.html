@@ -849,7 +849,7 @@ const KEY_EMBEBIDA = '';
 /* Sello de esta versión. Sirve para saber de un vistazo si el teléfono está
    corriendo lo último que subiste o una copia vieja del caché — que es
    imposible de distinguir a ojo y hace perder mucho tiempo. */
-const VERSION_APP = 'lv-0815-beb040';
+const VERSION_APP = 'lv-0815-0d3f77';
 console.log('Luz Verde ' + VERSION_APP);
 
 /**
@@ -1858,10 +1858,50 @@ if ('speechSynthesis' in window) {
   speechSynthesis.onvoiceschanged = cargarVoces;
 }
 
-/* Nombres propios en vez de "Voz 2 · Estados Unidos". Un nombre se recuerda y
-   se elige; un código de país no le dice nada a nadie. Se asignan por orden, y
-   como el orden es estable, cada voz conserva su nombre entre arranques. */
-const NOMBRES_VOZ = ['Nico', 'Ana', 'Tomi', 'Sofi', 'Bruno', 'Vale', 'Lucho', 'Mili'];
+/* Nombres propios en vez de "Voz 2 · Estados Unidos": un nombre se recuerda y
+   se elige, un código de país no le dice nada a nadie.
+
+   Pero el nombre tiene que coincidir con lo que se escucha. Una voz de mujer
+   que en la lista dice "Nico" se lee como un error, y repartir los nombres por
+   orden de aparición garantiza que tarde o temprano pase.
+
+   Ningún motor expone el género en un campo propio, así que hay que leerlo del
+   nombre técnico. Android lo deja explícito ("es-us-x-sfb#female_1-local") y
+   Windows usa nombres de pila ("Microsoft Sabina"). Cuando no aparece ninguna
+   de las dos pistas se usa un nombre que sirve para los dos, en vez de
+   arriesgar y errarle: un "Ale" nunca desentona, un "Bruno" con voz de mujer
+   sí. */
+const VOZ_FEM    = ['Ana', 'Sofi', 'Vale', 'Mili', 'Nina', 'Emi'];
+const VOZ_MASC   = ['Nico', 'Tomi', 'Bruno', 'Lucho', 'Ciro', 'Beto'];
+const VOZ_NEUTRO = ['Ale', 'Dani', 'Cris', 'Guille', 'Ariel', 'Cami'];
+
+// Nombres de pila que usan los motores de texto a voz en español.
+const PILA_FEM = /sabina|helena|laura|elvira|dalia|paloma|ximena|lupe|monica|marisol|catalina|isidora|francisca|camila|esperanza|abril|renata|salome|sofia|luciana|valentina|irene|paulina|tania/i;
+const PILA_MASC = /pablo|raul|jorge|alvaro|alonso|dario|carlos|andres|gonzalo|mateo|sebastian|tomas|felipe|diego|rodrigo|javier|miguel|manuel|nicolas|liam/i;
+
+function generoVoz(v) {
+  const n = (v.name || '') + ' ' + (v.voiceURI || '');
+  // "female" primero: contiene "male" adentro y si no, todas darían varón.
+  if (/female|femenin|mujer/i.test(n)) return 'f';
+  if (/male|masculin|hombre/i.test(n)) return 'm';
+  if (PILA_FEM.test(n)) return 'f';
+  if (PILA_MASC.test(n)) return 'm';
+  // Las dos voces en español que expone Google en Chrome son femeninas. No lo
+  // dice en ningún lado; se comprueba escuchándolas.
+  if (/^google\s+espa/i.test(v.name || '')) return 'f';
+  return '?';
+}
+
+/** Un nombre por voz, del género que corresponde y sin repetir. El orden de
+ *  vocesEs es estable, así que cada voz conserva su nombre entre arranques. */
+function nombrarVoces(vs) {
+  const pool = { f: VOZ_FEM, m: VOZ_MASC, '?': VOZ_NEUTRO };
+  const usados = { f: 0, m: 0, '?': 0 };
+  return vs.map((v, i) => {
+    const g = generoVoz(v);
+    return pool[g][usados[g]++] || 'Voz ' + (i + 1);
+  });
+}
 
 function pintarSelectorVoz() {
   const sel = $('selVoz'), ayuda = $('ayudaVoz');
@@ -1876,28 +1916,29 @@ function pintarSelectorVoz() {
       `${pq.nombre}</option>`).join('') + '</optgroup>';
   }
   if (vocesEs.length) {
+    const nombres = nombrarVoces(vocesEs);
     html += '<optgroup label="Voces del sistema">' + vocesEs.map((v, i) =>
       `<option value="s:${v.name}" ` +
       `${!paqueteVoz && v === vozEs ? 'selected' : ''}>` +
-      `${NOMBRES_VOZ[i] || 'Voz ' + (i + 1)}</option>`).join('') + '</optgroup>';
+      `${nombres[i]}</option>`).join('') + '</optgroup>';
   }
 
   if (!html) {
     sel.innerHTML = '<option>No hay voces disponibles</option>';
     sel.disabled = true;
-    ayuda.textContent = 'Tu teléfono no tiene voces en español instaladas y '
-      + 'todavía no cargaste ningún paquete propio.';
+    ayuda.style.display = '';
+    ayuda.innerHTML = 'Tu teléfono no tiene voces en español instaladas. '
+      + 'Para sumar una: <b>Ajustes de Android → Administración general → '
+      + 'Idioma → Texto a voz → motor de Google → Instalar datos de voz</b>.';
     return;
   }
   sel.disabled = false;
   sel.innerHTML = html;
 
-  ayuda.innerHTML = paquetes.length
-    ? 'Las voces de Luz Verde están grabadas y suenan igual en cualquier '
-      + 'teléfono. Las del sistema dependen de lo que tengas instalado.'
-    : 'Estas son las voces que tiene instaladas tu teléfono. Para sumar más: '
-      + '<b>Ajustes de Android → Administración general → Idioma → Texto a voz '
-      + '→ motor de Google → Instalar datos de voz</b>.';
+  // Sin texto: al lado está el botón de prueba, que explica mejor que cualquier
+  // párrafo. El cartel solo aparece cuando no hay ninguna voz y hay que actuar.
+  ayuda.textContent = '';
+  ayuda.style.display = 'none';
 }
 
 
@@ -2327,85 +2368,6 @@ $('btnVoz').onclick = () => {
   modoVoz = modoVoz === 'todo' ? 'alertas' : modoVoz === 'alertas' ? 'mudo' : 'todo';
   localStorage.setItem('tt_voz', modoVoz);
   pintarBotonVoz();
-
-/** Único punto donde se toca la preferencia: si no, las dos pantallas se
- *  desincronizan y una muestra lo contrario de la otra. */
-function alternarEvitar(v) {
-  S.evitar = S.evitar.includes(v) ? S.evitar.filter(x => x !== v) : S.evitar.concat(v);
-  localStorage.setItem('tt_evitar', JSON.stringify(S.evitar));
-  pintarEvitarAjustes();
-  if (S.from && S.to) route(); else if (S.routes.length) refresh();
-}
-
-const TEMAS_OPC = [['auto', 'Automático'], ['claro', 'Claro'], ['oscuro', 'Oscuro']];
-
-function pintarTemaAjustes() {
-  $('temaAjustes').innerHTML = TEMAS_OPC.map(([v, t]) =>
-    `<button data-tema="${v}" class="${preferenciaTema === v ? 'on' : ''}">${t}</button>`).join('');
-  $('temaAjustes').querySelectorAll('button').forEach(el => el.onclick = () => {
-    preferenciaTema = el.dataset.tema;
-    localStorage.setItem('tt_tema', preferenciaTema);
-    temaActual = null;
-    aplicarTema();
-    pintarTemaAjustes();
-  });
-}
-
-function pintarEvitarAjustes() {
-  $('evitarAjustes').innerHTML = EVITABLES.map(([v, t]) =>
-    `<button data-ev="${v}" class="${S.evitar.includes(v) ? 'on' : ''}">${t}</button>`).join('');
-  $('evitarAjustes').querySelectorAll('button').forEach(
-    el => el.onclick = () => alternarEvitar(el.dataset.ev));
-}
-
-/* Ajustes */
-const abrirAjustes = () => {
-  $('sello').textContent = 'Versión ' + VERSION_APP;
-  pintarSelectorVoz();
-  pintarEvitarAjustes();
-  pintarTemaAjustes();
-  $('rngVel').value = velocidadVoz;
-  // La velocidad es de la síntesis de Android: sobre un audio grabado no aplica.
-  $('campVel').style.display = paqueteVoz ? 'none' : 'block';
-  $('valVel').textContent = velocidadVoz.toFixed(2).replace('.', ',') + '×';
-  $('ajustes').classList.remove('hidden');
-};
-$('btnMenu').onclick = abrirAjustes;
-alMantenerPulsado($('btnVoz'), abrirAjustes);
-
-$('cerrarAjustes').onclick = () => $('ajustes').classList.add('hidden');
-$('ajustes').onclick = e => { if (e.target.id === 'ajustes') $('ajustes').classList.add('hidden'); };
-$('cerrarAjustes').textContent = 'Cerrar';
-
-$('selVoz').onchange = e => {
-  const [tipo, valor] = [e.target.value.slice(0, 1), e.target.value.slice(2)];
-  if (tipo === 'p') {
-    paqueteVoz = valor;
-  } else {
-    paqueteVoz = '';
-    vozElegida = valor;
-    vozEs = vocesEs.find(v => v.name === vozElegida) || vozEs;
-    localStorage.setItem('tt_vozNombre', vozElegida);
-  }
-  localStorage.setItem('tt_paquete', paqueteVoz);
-  probarVoz();
-};
-$('rngVel').oninput = e => {
-  velocidadVoz = parseFloat(e.target.value);
-  $('valVel').textContent = velocidadVoz.toFixed(2).replace('.', ',') + '×';
-  localStorage.setItem('tt_vozVel', String(velocidadVoz));
-};
-$('rngVel').onchange = () => probarVoz();
-
-function probarVoz() {
-  if ('speechSynthesis' in window) speechSynthesis.cancel();
-  NAV.ultimaVoz = 0;
-  const antes = modoVoz;
-  modoVoz = 'todo';                       // la prueba se escucha aunque esté en silencio
-  hablar('En 300 metros, girá a la izquierda en Avenida Santa Fe');
-  modoVoz = antes;
-}
-$('probarVoz').onclick = probarVoz;
   showMsg('Voz: ' + VOZ_TEXTO[modoVoz]);
   if (modoVoz !== 'mudo') {
     if ('speechSynthesis' in window) speechSynthesis.cancel();

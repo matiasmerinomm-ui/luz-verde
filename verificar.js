@@ -559,15 +559,118 @@ test('sin ninguna voz lo dice en vez de fallar callado', () => {
   const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
   assert.ok(/No hay voces disponibles/.test(f),
     'si no hay ni paquetes ni voces del sistema, el usuario tiene que enterarse');
-  assert.ok(/Texto a voz/.test(f), 'y saber dónde instalar voces del sistema');
+  assert.ok(/Texto a voz/.test(f),
+    'sin voces, el usuario necesita saber donde conseguirlas');
 });
 
 test('las voces se muestran con nombre, no con codigo de pais', () => {
-  assert.ok(/const NOMBRES_VOZ = \[/.test(js), 'faltan los nombres propios');
   const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
-  assert.ok(/NOMBRES_VOZ\[i\]/.test(f), 'el selector no usa los nombres');
+  assert.ok(/nombrarVoces\(vocesEs\)/.test(f), 'el selector no usa los nombres');
   assert.ok(!/Estados Unidos|Argentina/.test(f),
     'un codigo de pais no le dice nada a nadie; un nombre se recuerda');
+});
+
+/* El nombre tiene que coincidir con la voz. Se corre generoVoz y nombrarVoces
+   de verdad, contra los nombres tal como los publican los motores reales. */
+{
+  // Todo el bloque de nombres junto, tal cual esta en la app: las expresiones
+  // regulares de nombres de pila viven en el mismo scope que generoVoz.
+  const bloque = js.match(
+    /const VOZ_FEM[\s\S]*?function nombrarVoces\([\s\S]*?\n\}/)[0];
+  const V = new Function(bloque +
+    '\nreturn {generoVoz, nombrarVoces, VOZ_FEM, VOZ_MASC, VOZ_NEUTRO};')();
+  const { generoVoz: g, nombrarVoces: nombrar, VOZ_FEM, VOZ_MASC, VOZ_NEUTRO } = V;
+  const v = (name, uri) => ({ name, voiceURI: uri || name });
+
+  test('el genero se lee del nombre tecnico de Android', () => {
+    assert.strictEqual(g(v('es-us-x-sfb#female_1-local')), 'f');
+    assert.strictEqual(g(v('es-es-x-eed#male_2-local')), 'm');
+  });
+
+  test('"female" no se confunde con "male"', () => {
+    // "female" contiene "male": si se chequea al reves, toda mujer es varon.
+    assert.strictEqual(g(v('Spanish female voice')), 'f');
+  });
+
+  test('el genero se lee del nombre de pila en Windows', () => {
+    assert.strictEqual(g(v('Microsoft Sabina - Spanish (Mexico)')), 'f');
+    assert.strictEqual(g(v('Microsoft Pablo - Spanish (Spain)')), 'm');
+    assert.strictEqual(g(v('Microsoft Helena - Spanish (Spain)')), 'f');
+    assert.strictEqual(g(v('Microsoft Raul - Spanish (Mexico)')), 'm');
+  });
+
+  test('sin ninguna pista no se adivina', () => {
+    assert.strictEqual(g(v('es-AR-Neural')), '?');
+  });
+
+  test('a cada voz le toca un nombre de su genero', () => {
+    const vs = [v('es-us-x-sfb#female_1-local'), v('Microsoft Pablo'),
+                v('es-AR-Neural'), v('Microsoft Sabina')];
+    const n = nombrar(vs);
+    assert.ok(VOZ_FEM.includes(n[0]), n[0] + ' no es nombre de mujer');
+    assert.ok(VOZ_MASC.includes(n[1]), n[1] + ' no es nombre de varon');
+    assert.ok(VOZ_NEUTRO.includes(n[2]), n[2] + ' deberia servir para los dos');
+    assert.ok(VOZ_FEM.includes(n[3]), n[3] + ' no es nombre de mujer');
+  });
+
+  test('no se repite un nombre en la lista', () => {
+    const vs = ['female_1', 'female_2', 'female_3', 'male_1', 'male_2', 'x', 'y']
+      .map(s => v('es-us-x-abc#' + s + '-local'));
+    const n = nombrar(vs);
+    assert.strictEqual(new Set(n).size, n.length, 'nombres repetidos: ' + n);
+  });
+
+  test('con mas voces que nombres nadie queda sin etiqueta', () => {
+    const n = nombrar(Array.from({ length: 30 }, (_, i) => v('voz' + i)));
+    assert.ok(n.every(x => typeof x === 'string' && x.length), 'hay un hueco');
+    assert.strictEqual(new Set(n).size, 30, 'se repitieron al desbordar');
+  });
+}
+
+test('el selector de voz no lleva parrafo explicativo', () => {
+  // Al lado esta el boton de prueba: escuchar la voz explica mas que un texto.
+  const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
+  // El instructivo solo vale cuando no hay ninguna voz. Con voces cargadas es
+  // ruido: se mira la lista, se toca "Escuchar una prueba" y listo.
+  const conVoces = f.slice(f.indexOf("sel.disabled = false"));
+  assert.ok(conVoces.length > 50, 'no se encontro la rama con voces');
+  assert.ok(!/Administracion general|Administración general/.test(conVoces),
+    'volvio el instructivo de Android abajo del selector');
+});
+
+test('el cartel de "no hay voces" si se muestra', () => {
+  // El unico caso donde hace falta texto: no hay nada para elegir y hay que
+  // ir a instalar voces. Si quedara oculto, el selector aparece vacio y mudo.
+  const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
+  const corte = f.indexOf('No hay voces disponibles');
+  assert.ok(corte > 0, 'no esta el caso sin voces');
+  assert.ok(/ayuda\.style\.display = ''/.test(f.slice(corte, corte + 300)),
+    'el cartel queda escondido justo cuando hace falta');
+});
+
+test('no hay bloques de codigo duplicados', () => {
+  // Un pegado mal ubicado metio 79 lineas ADENTRO del onclick del boton de voz.
+  // Era JavaScript valido, asi que ningun test de carga lo vio: simplemente
+  // media app se definia recien al tocar ese boton, y se redefinia en cada
+  // toque. La copia de arriba tapaba el sintoma.
+  const lineas = js.split('\n').map(l => l.trim())
+    .filter(l => l.length > 30 && !l.startsWith('//') && !l.startsWith('*'));
+  const veces = new Map();
+  for (const l of lineas) veces.set(l, (veces.get(l) || 0) + 1);
+  // Solo enganches de eventos: repetir uno significa dos listeners activos.
+  // Un `.classList.add('hidden')` repetido, en cambio, es normal y sano.
+  const repes = [...veces].filter(([l, n]) => n > 1 &&
+    /^(\$\([^)]*\)\.(onclick|onchange|oninput|onsubmit) =|alMantenerPulsado\()/.test(l));
+  assert.deepStrictEqual(repes, [],
+    'wiring de UI repetido, se registra dos veces: ' +
+    repes.map(([l]) => l).join(' | '));
+});
+
+test('el onclick del boton de voz hace solo lo suyo', () => {
+  const f = js.match(/\$\('btnVoz'\)\.onclick = \(\) => \{[\s\S]*?\n\};/)[0];
+  assert.ok(f.split('\n').length < 15,
+    'el handler tiene ' + f.split('\n').length + ' lineas: algo se colo adentro');
+  assert.ok(!/^function /m.test(f), 'hay funciones declaradas adentro del handler');
 });
 
 test('los rotulos de ruta dicen que hacen', () => {
