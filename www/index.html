@@ -869,6 +869,31 @@ const EVITABLES = [
   ['alreadyUsedRoads', 'Repetir camino'],
 ];
 
+/**
+ * Pide un plugin nativo sin poder romper la app.
+ *
+ * Un plugin que no está instalado no falla al pedirlo: falla recién al usarlo,
+ * y ahí tira una excepción sincrónica que mata el resto del script. Como todo
+ * esto corre al cargar, el resultado es una app entera muerta — botones que no
+ * responden y ninguna pista de por qué. Pasó exactamente eso con @capacitor/app.
+ *
+ * Por eso: todo pedido y toda llamada a un plugin pasa por acá.
+ */
+function plugin(nombre) {
+  const C = window.Capacitor;
+  if (!C || typeof C.registerPlugin !== 'function') return null;
+  try { return C.registerPlugin(nombre) || null; } catch (_) { return null; }
+}
+
+/** Llama un método de plugin. Devuelve null si no existe o si revienta. */
+function llamarPlugin(pl, metodo, ...args) {
+  if (!pl || typeof pl[metodo] !== 'function') return null;
+  try {
+    const r = pl[metodo](...args);
+    return r && typeof r.catch === 'function' ? r.catch(() => null) : r;
+  } catch (_) { return null; }
+}
+
 /** Preferencias de ruteo. Se leen antes del estado porque S las necesita. */
 function leerEvitar() {
   try { return JSON.parse(localStorage.getItem('tt_evitar')) || []; }
@@ -1466,10 +1491,7 @@ function geoNativo() {
   if (!C) return null;
   if (typeof C.isNativePlatform === 'function' && !C.isNativePlatform()) return null;
   if (C.Plugins && C.Plugins.Geolocation) return C.Plugins.Geolocation;
-  if (typeof C.registerPlugin === 'function') {
-    try { return C.registerPlugin('Geolocation'); } catch (_) { return null; }
-  }
-  return null;
+  return plugin('Geolocation');
 }
 
 /** Pide el permiso explícitamente. Devuelve 'granted' | 'denied' | 'na'. */
@@ -2517,18 +2539,13 @@ $('resetKey').onclick = e => {
 
 /** Los enlaces cortos hay que seguirlos hasta el final para ver el destino. */
 async function expandirEnlaceCorto(url) {
-  const C = window.Capacitor;
-  if (!C || typeof C.registerPlugin !== 'function') return null;
-  let http;
-  try { http = C.registerPlugin('CapacitorHttp'); } catch (_) { return null; }
-  if (!http || typeof http.get !== 'function') return null;
-  try {
-    // Va por el puente nativo justamente para saltear CORS: desde el WebView,
-    // Google no deja leer su respuesta.
-    const r = await http.get({ url, headers: { 'User-Agent': 'Mozilla/5.0' } });
-    return parsearUbicacion(r.url || '')
-        || parsearUbicacion(typeof r.data === 'string' ? r.data : '');
-  } catch (_) { return null; }
+  // Va por el puente nativo justamente para saltear CORS: desde el WebView,
+  // Google no deja leer su respuesta.
+  const r = await llamarPlugin(plugin('CapacitorHttp'), 'get',
+                               { url, headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!r) return null;
+  return parsearUbicacion(r.url || '')
+      || parsearUbicacion(typeof r.data === 'string' ? r.data : '');
 }
 
 /** Toma cualquier texto y, si tiene una ubicación adentro, arma el viaje. */
@@ -2566,19 +2583,15 @@ $('toInput').addEventListener('paste', e => {
 
 /* Abrir la app desde un enlace: geo: o un link de Maps. */
 (function conectarEnlacesEntrantes() {
-  const C = window.Capacitor;
-  if (!C || typeof C.registerPlugin !== 'function') return;
-  let app;
-  try { app = C.registerPlugin('App'); } catch (_) { return; }
+  const app = plugin('App');
   if (!app) return;
-
   const atender = url => { if (url) usarUbicacionCompartida(url); };
-  if (typeof app.getLaunchUrl === 'function') {
-    app.getLaunchUrl().then(r => atender(r && r.url)).catch(() => {});
+
+  const inicial = llamarPlugin(app, 'getLaunchUrl');
+  if (inicial && typeof inicial.then === 'function') {
+    inicial.then(r => atender(r && r.url));
   }
-  if (typeof app.addListener === 'function') {
-    app.addListener('appUrlOpen', d => atender(d && d.url));
-  }
+  llamarPlugin(app, 'addListener', 'appUrlOpen', d => atender(d && d.url));
 })();
 
 /* ============================================================
@@ -2609,17 +2622,11 @@ function retroceder() {
 }
 
 (function conectarAtras() {
-  const C = window.Capacitor;
-  const plug = C && typeof C.registerPlugin === 'function'
-    ? (() => { try { return C.registerPlugin('App'); } catch (_) { return null; } })()
-    : null;
-
-  if (plug && typeof plug.addListener === 'function') {
-    plug.addListener('backButton', () => {
-      if (!retroceder() && typeof plug.exitApp === 'function') plug.exitApp();
-    });
-    return;
-  }
+  const app = plugin('App');
+  const enganchado = llamarPlugin(app, 'addListener', 'backButton', () => {
+    if (!retroceder()) llamarPlugin(app, 'exitApp');
+  });
+  if (enganchado) return;
 
   // En el navegador no hay botón físico, pero sí el gesto de volver. Se
   // mantiene una entrada de más en el historial para poder interceptarlo.

@@ -39,7 +39,43 @@ global.document = {
   addEventListener(){}, body: nuevoEl('body'),
   hidden: false,
 };
-global.window = { addEventListener(){}, Capacitor: undefined };
+/**
+ * Capacitor de mentira, que se porta como el real.
+ *
+ * La clave está en `registerPlugin`: Capacitor NUNCA falla al registrar un
+ * plugin, aunque no esté instalado. Devuelve un proxy que revienta recién
+ * cuando le llamás un método. Por eso una app puede cargar perfecto en el
+ * navegador y morir dentro del APK.
+ */
+function capacitorFalso(instalados) {
+  return {
+    isNativePlatform: () => true,
+    Plugins: {},
+    registerPlugin(nombre) {
+      if (instalados.includes(nombre)) {
+        return { addListener: () => ({ remove(){} }),
+                 getLaunchUrl: () => Promise.resolve({ url: null }),
+                 exitApp(){}, get: () => Promise.resolve({ data:'', url:'' }),
+                 getCurrentPosition: () => Promise.resolve({ coords:{latitude:0,longitude:0} }),
+                 watchPosition: () => Promise.resolve('w1'), clearWatch(){},
+                 requestPermissions: () => Promise.resolve({ location:'granted' }) };
+      }
+      // Plugin no instalado: exactamente lo que hace Capacitor de verdad.
+      return new Proxy({}, { get() {
+        return () => { throw new Error('plugin no implementado'); };
+      } });
+    },
+  };
+}
+
+const escenario = process.argv[3] || 'web';
+const ENTORNOS = {
+  web:      undefined,
+  // El caso que rompió la app: dentro del APK, pero sin @capacitor/app.
+  apkPelado: capacitorFalso(['Geolocation']),
+  apkCompleto: capacitorFalso(['Geolocation', 'App', 'CapacitorHttp']),
+};
+global.window = { addEventListener(){}, Capacitor: ENTORNOS[escenario] };
 global.navigator = { geolocation: { getCurrentPosition(){}, watchPosition(){ return 1; }, clearWatch(){} }, wakeLock: undefined };
 global.localStorage = { _d:{}, getItem(k){ return this._d[k] ?? null; }, setItem(k,v){ this._d[k]=v; }, removeItem(k){ delete this._d[k]; } };
 global.history = { pushState(){} };
@@ -69,4 +105,4 @@ for (const b of bloques) {
               if (e.stack) console.log('   ' + e.stack.split('\n')[1] || ''); process.exit(1); }
 }
 if (faltantes.size) console.log('⚠ ids inexistentes:', [...faltantes].join(', '));
-console.log(`✅ los ${n} bloques cargaron sin errores`);
+console.log(`✅ [${escenario}] los ${n} bloques cargaron sin errores`);

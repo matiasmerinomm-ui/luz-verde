@@ -468,13 +468,48 @@ test('el GPS continuo usa el plugin nativo y pide permiso antes', () => {
     'queda en "Buscando señal" para siempre');
 });
 
-test('el plugin se obtiene con registerPlugin, no solo de Capacitor.Plugins', () => {
+test('el plugin se obtiene por el puente nativo, no solo de Capacitor.Plugins', () => {
   // Sin empaquetador, Capacitor.Plugins.Geolocation puede no existir. Si solo
   // se lee de ahi, la app cae a navigator.geolocation, que dentro del WebView
   // deniega sin mostrar el dialogo de Android.
   const f = js.match(/function geoNativo\(\)[\s\S]*?\n\}/)[0];
-  assert.ok(/registerPlugin\('Geolocation'\)/.test(f),
-    'falta el registerPlugin: en un proyecto sin bundler es la unica via');
+  assert.ok(/plugin\('Geolocation'\)/.test(f),
+    'falta pedirlo por el puente nativo: sin bundler es la unica via');
+});
+
+test('ninguna llamada a un plugin puede matar la app', () => {
+  // La causa de un fallo real: Capacitor NUNCA falla al registrar un plugin,
+  // aunque no este instalado. Devuelve un proxy que revienta al usarlo, y esa
+  // excepcion mata el resto del script. Resultado: app entera muerta, sin
+  // ninguna pista. Por eso todo pasa por plugin() y llamarPlugin().
+  const llamadas = [...js.matchAll(/\.registerPlugin\(/g)];
+  assert.strictEqual(llamadas.length, 1,
+    `registerPlugin se llama ${llamadas.length} veces; solo plugin() puede hacerlo`);
+  // Y esa única llamada tiene que estar dentro de plugin().
+  const dentro = js.match(/function plugin\([\s\S]*?\n\}/)[0];
+  assert.ok(/\.registerPlugin\(/.test(dentro),
+    'la llamada quedó fuera de plugin()');
+
+  for (const f of ['plugin', 'llamarPlugin']) {
+    const cuerpo = js.match(new RegExp(`function ${f}\\([\\s\\S]*?\\n\\}`))[0];
+    assert.ok(/try/.test(cuerpo) && /catch/.test(cuerpo), f + '() no atrapa errores');
+  }
+});
+
+test('los plugins que se usan estan declarados como dependencia', () => {
+  // Se pueden pedir plugins no instalados sin romper, pero entonces la funcion
+  // simplemente no existe. Si la app la necesita, tiene que estar en package.json.
+  const pkg = JSON.parse(require('fs').readFileSync(__dirname + '/package.json', 'utf8'));
+  const deps = Object.keys(pkg.dependencies || {});
+  const usados = [...js.matchAll(/plugin\('(\w+)'\)/g)].map(m => m[1]);
+
+  const nativo = { Geolocation: '@capacitor/geolocation', App: '@capacitor/app' };
+  for (const u of new Set(usados)) {
+    if (nativo[u]) {
+      assert.ok(deps.includes(nativo[u]),
+        `se usa el plugin ${u} pero falta ${nativo[u]} en package.json`);
+    }
+  }
 });
 
 test('hay una salida visible cuando falta el permiso', () => {
