@@ -359,7 +359,8 @@ body.navegando #btnVoz{top:auto;bottom:150px}
          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
   <button id="keySave" class="btn">Empezar</button>
   <div id="keyErr" class="sub hidden" style="color:#ffb4a8;text-align:center"></div>
-  <p class="foot">2.500 consultas por día sin costo.<br>Cada cálculo de ruta usa una.</p>
+  <p class="foot">2.500 consultas por día sin costo.<br>Cada cálculo de ruta usa una.
+    <br><span id="selloSetup" style="opacity:.6"></span></p>
 </div>
 
 <!-- ============ APP ============ -->
@@ -402,7 +403,7 @@ body.navegando #btnVoz{top:auto;bottom:150px}
   <div class="hoja">
     <div class="menuCab">
       <img src="../assets/icon.png" alt="">
-      <div><b>Luz Verde</b><span>Ajustes</span></div>
+      <div><b>Luz Verde</b><span id="sello">Ajustes</span></div>
     </div>
 
     <h2 class="hojaTit">Voz y sonido</h2>
@@ -839,6 +840,12 @@ function fmtDistanciaCorta(m) {
    directamente y te ahorras el paso 1.
    ============================================================ */
 const KEY_EMBEBIDA = '';
+
+/* Sello de esta versión. Sirve para saber de un vistazo si el teléfono está
+   corriendo lo último que subiste o una copia vieja del caché — que es
+   imposible de distinguir a ojo y hace perder mucho tiempo. */
+const VERSION_APP = 'lv-0815-337819';
+console.log('Luz Verde ' + VERSION_APP);
 
 /**
  * Modos de viaje.
@@ -2348,6 +2355,7 @@ function pintarEvitarAjustes() {
 
 /* Ajustes */
 const abrirAjustes = () => {
+  $('sello').textContent = 'Versión ' + VERSION_APP;
   pintarSelectorVoz();
   pintarEvitarAjustes();
   pintarTemaAjustes();
@@ -2434,6 +2442,7 @@ function pintarEvitarAjustes() {
 
 /* Ajustes */
 const abrirAjustes = () => {
+  $('sello').textContent = 'Versión ' + VERSION_APP;
   pintarSelectorVoz();
   pintarEvitarAjustes();
   pintarTemaAjustes();
@@ -2642,6 +2651,7 @@ function start() {
   setTimeout(() => map.invalidateSize(), 200);
 }
 
+$('selloSetup').textContent = VERSION_APP;
 if (S.key) { $('setup').classList.add('hidden'); start(); }
 
 // Recalcular al volver a la app: si estuvo minimizada, el ETA quedó viejo.
