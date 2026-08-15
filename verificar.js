@@ -297,9 +297,31 @@ test('los tres endpoints se usan y van por https', () => {
 });
 
 test('se pide el transito en vivo y el tipico', () => {
-  assert.ok(/traffic:\s*'true'/.test(js), 'falta traffic=true');
+  assert.ok(/traffic: M\.transito \? 'true' : 'false'/.test(js),
+    'el tránsito tiene que pedirse según el modo de viaje');
   assert.ok(/computeTravelTimeFor:\s*'all'/.test(js), 'falta computeTravelTimeFor=all');
-  assert.ok(/sectionType:\s*'traffic'/.test(js), 'falta sectionType=traffic');
+  assert.ok(/p\.append\('sectionType', 'traffic'\)/.test(js), 'falta sectionType=traffic');
+});
+
+test('a pie y en bici no se pide transito vehicular', () => {
+  // Pedirlo igual devuelve tiempos calculados para autos, disfrazados de
+  // caminata. Es peor que no tener el dato.
+  const f = js.match(/const MODOS = \[([\s\S]*?)\];/)[1];
+  assert.ok(/id: 'pedestrian',[\s\S]{0,80}transito: false/.test(f), 'a pie con tránsito');
+  assert.ok(/id: 'bicycle',[\s\S]{0,80}transito: false/.test(f), 'bici con tránsito');
+  assert.ok(/id: 'car',[\s\S]{0,80}transito: true/.test(f), 'auto sin tránsito');
+});
+
+test('caminando no se piden camaras ni limites', () => {
+  const f = js.match(/function cargarRutaEnNav\([\s\S]*?\n\}/)[0];
+  assert.ok(/if \(!modoActual\(\)\.transito\) return;/.test(f),
+    'avisar de cámaras de velocidad yendo a pie es ruido, y gasta la consulta');
+});
+
+test('los cuatro modos existen y se guardan', () => {
+  const ids = [...js.matchAll(/id: '(car|motorcycle|bicycle|pedestrian)'/g)].map(m => m[1]);
+  assert.deepStrictEqual(ids, ['car', 'motorcycle', 'bicycle', 'pedestrian']);
+  assert.ok(/localStorage\.setItem\('tt_modo'/.test(js), 'el modo no se recuerda');
 });
 
 test('hay refresco automatico del ETA', () => {

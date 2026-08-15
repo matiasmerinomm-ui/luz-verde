@@ -69,6 +69,14 @@ button,input{font-family:inherit;font-size:16px}
 #sug span{color:var(--dim);font-size:12.5px}
 .hidden{display:none!important}
 
+/* selector de modo de viaje */
+#modos{display:flex;gap:7px;margin-top:2px}
+#modos button{flex:1;padding:9px 4px;border-radius:12px;border:1px solid var(--line);
+  background:transparent;color:var(--dim);font-size:12px;font-weight:600;
+  display:flex;flex-direction:column;align-items:center;gap:3px;transition:.12s}
+#modos button .em{font-size:17px;line-height:1}
+#modos button.on{background:var(--verde);border-color:var(--verde);color:#fff}
+
 /* ---------------------------------------------------------------------------
    Tratamiento del mapa
    ---------------------------------------------------------------------------
@@ -312,6 +320,31 @@ body.navegando #btnVoz{top:auto;bottom:150px}
 </style>
 </head>
 <body>
+<script>
+/* Cazador de errores. Va primero de todo, antes que cualquier otro script.
+
+   Si algo revienta al cargar, el navegador deja la página muerta sin decir
+   nada: los botones no responden y parece que la app "no hace nada". Esto lo
+   convierte en un cartel visible, que es la diferencia entre reportar "no anda"
+   y reportar el error exacto. */
+(function () {
+  function mostrar(msg) {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;' +
+      'background:#7f1d1d;color:#fff;font:12px/1.5 monospace;padding:10px 12px;' +
+      'white-space:pre-wrap;max-height:45vh;overflow:auto';
+    d.textContent = 'Luz Verde falló al cargar:\n\n' + msg +
+      '\n\nMandale esta pantalla a quien la programó.';
+    (document.body || document.documentElement).appendChild(d);
+  }
+  window.addEventListener('error', function (e) {
+    mostrar((e.message || 'error') + '\n' + (e.filename || '') + ':' + (e.lineno || '?'));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    mostrar('Promesa rechazada: ' + ((e.reason && e.reason.message) || e.reason));
+  });
+})();
+</script>
 
 <!-- ============ CONFIGURACIÓN ============ -->
 <div id="setup">
@@ -338,9 +371,10 @@ body.navegando #btnVoz{top:auto;bottom:150px}
   </div>
   <div class="inputrow">
     <i class="dot" style="background:#ef4444"></i>
-    <input id="toInput" placeholder="¿A dónde vas?" autocomplete="off">
+    <input id="toInput" placeholder="¿A dónde vas? Podés pegar un link de Maps" autocomplete="off">
     <button class="iconbtn hidden" id="clearBtn">✕</button>
   </div>
+  <div id="modos"></div>
   <div id="sug" class="hidden"></div>
 </div>
 
@@ -694,6 +728,58 @@ out geom;`;
   }
 }
 
+
+/* ----------------------------------------------------------- ubicaciones */
+
+/**
+ * Saca coordenadas de lo que sea que te hayan compartido.
+ *
+ * Google Maps genera media docena de formatos distintos según desde dónde
+ * compartas, y todos terminan en el mismo WhatsApp. Se prueban de más preciso
+ * a menos: el `!3d!4d` del final es la coordenada exacta del lugar, mientras
+ * que el `@` del medio es apenas el centro del mapa en pantalla y puede estar
+ * a cuadras del punto real.
+ *
+ * Devuelve { lat, lon, nombre } o null.
+ */
+function parsearUbicacion(texto) {
+  if (!texto) return null;
+  const t = String(texto).trim();
+  const ok = (la, lo, nombre) => {
+    const lat = parseFloat(la), lon = parseFloat(lo);
+    if (!isFinite(lat) || !isFinite(lon)) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (lat === 0 && lon === 0) return null;      // el "geo:0,0" de relleno
+    return { lat, lon, nombre: nombre ? decodeURIComponent(nombre.replace(/\+/g, ' ')) : null };
+  };
+
+  let m;
+  // 1. El par exacto que Google esconde al final del enlace de un lugar.
+  if ((m = t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/))) return ok(m[1], m[2]);
+
+  // 2. geo:0,0?q=lat,lon(Nombre)  — lo que manda "compartir ubicación".
+  if ((m = t.match(/[?&]q=(-?\d+\.\d+),\s*(-?\d+\.\d+)(?:\s*\(([^)]*)\))?/))) {
+    return ok(m[1], m[2], m[3]);
+  }
+  // 3. query= de los enlaces nuevos de Maps.
+  if ((m = t.match(/[?&]query=(-?\d+\.\d+),\s*(-?\d+\.\d+)/))) return ok(m[1], m[2]);
+  // 4. destination= de los enlaces de indicaciones.
+  if ((m = t.match(/[?&]destination=(-?\d+\.\d+),\s*(-?\d+\.\d+)/))) return ok(m[1], m[2]);
+  // 5. geo:lat,lon pelado.
+  if ((m = t.match(/^geo:(-?\d+\.?\d*),(-?\d+\.?\d*)/i))) return ok(m[1], m[2]);
+  // 6. El @ de la URL: es el centro del mapa, no el lugar. Sirve de aproximación.
+  if ((m = t.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/))) return ok(m[1], m[2]);
+  // 7. Alguien que pega "-34.603, -58.381" a mano.
+  if ((m = t.match(/^\s*(-?\d{1,2}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})\s*$/))) return ok(m[1], m[2]);
+
+  return null;
+}
+
+/** ¿Es un enlace corto de Google, de los que no traen la coordenada adentro? */
+function esEnlaceCorto(texto) {
+  return /(?:maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs)/i.test(String(texto || ''));
+}
+
 /* -------------------------------------------------------------------- desvío */
 
 /**
@@ -755,6 +841,21 @@ function fmtDistanciaCorta(m) {
 const KEY_EMBEBIDA = '';
 
 /**
+ * Modos de viaje.
+ *
+ * `transito` marca cuáles usan tráfico vehicular: caminando o en bici no
+ * aplica, y pedirlo igual devuelve tiempos de auto disfrazados. Tampoco tiene
+ * sentido avisar de cámaras de velocidad ni de exceso yendo a pie.
+ */
+const MODOS = [
+  { id: 'car',        nombre: 'Auto',  icono: '🚗', transito: true  },
+  { id: 'motorcycle', nombre: 'Moto',  icono: '🏍️', transito: true  },
+  { id: 'bicycle',    nombre: 'Bici',  icono: '🚲', transito: false },
+  { id: 'pedestrian', nombre: 'A pie', icono: '🚶', transito: false },
+];
+const modoActual = () => MODOS.find(m => m.id === S.modo) || MODOS[0];
+
+/**
  * Todo lo que TomTom permite evitar. Son exactamente estos siete: no hay
  * forma de pedirle que esquive cruces ferroviarios ni zonas inseguras.
  */
@@ -787,6 +888,7 @@ const S = {
   picked: 0,
   departIn: 0,         // minutos desde ahora; 0 = salir ya
   evitar: leerEvitar(),// tollRoads | motorways | ferries | unpavedRoads
+  modo: localStorage.getItem('tt_modo') || 'car',
   layers: [],
   markers: [],
   timer: null,
@@ -953,25 +1055,28 @@ async function route() {
   S.busy = true;
   renderLoading();
 
+  const M = modoActual();
   const p = new URLSearchParams({
     key: S.key,
-    traffic: 'true',                  // <- tránsito en vivo
-    travelMode: 'car',
+    traffic: M.transito ? 'true' : 'false',
+    travelMode: M.id,
     routeType: 'fastest',
     computeTravelTimeFor: 'all',      // <- devuelve además el tiempo típico y sin tránsito
     maxAlternatives: '2',
-    sectionType: 'traffic',           // <- tramos con demora, para pintar la ruta
     instructionsType: 'text',
     language: 'es-ES',
   });
-  // Un sectionType por cada cosa que queremos saber del recorrido.
-  p.append('sectionType', 'tollRoad');   // <- para avisar si la ruta tiene peaje
-  p.append('sectionType', 'motorway');   // <- para nombrar la ruta por su autopista
+  if (M.transito) p.append('sectionType', 'traffic');
+  // Peajes y autopistas solo tienen sentido en vehículo.
+  if (M.transito) {
+    p.append('sectionType', 'tollRoad');
+    p.append('sectionType', 'motorway');
+  }
 
   if (S.departIn > 0) {
     p.set('departAt', isoLocal(new Date(Date.now() + S.departIn * 60000)));
   }
-  if (S.evitar.length) p.set('avoid', S.evitar.join(','));
+  if (M.transito && S.evitar.length) p.set('avoid', S.evitar.join(','));
 
   const loc = `${S.from.lat},${S.from.lon}:${S.to.lat},${S.to.lon}`;
 
@@ -1248,6 +1353,7 @@ function render() {
 
   const whens = [[0, 'Ahora'], [15, '+15 min'], [30, '+30 min'], [60, '+1 h'], [120, '+2 h']];
   const nombre = nombreRuta(r);
+  const M = modoActual();
 
 
   $('result').innerHTML = `
@@ -1258,12 +1364,13 @@ function render() {
     <div class="sub">${fmtDist(r.meters)} · ${S.to.label}</div>
     ${nombre ? `<div class="viapor">Por ${nombre}</div>` : ''}
     ${r.peaje ? '<div class="tagpeaje">Esta ruta tiene peaje</div>' : ''}
+    ${!M.transito ? `<div class="sub">Modo ${M.nombre.toLowerCase()}: sin datos de tránsito vehicular.</div>` : ''}
     ${vs ? `<div style="margin-top:9px">${vs}</div>` : ''}
     ${badge}
     ${jam}
     <button class="btn iniciar" id="btnIniciar">Iniciar viaje</button>
-    <div class="whenlbl">Evitar</div>
-    <div class="when evitar">${EVITABLES.slice(0, 4).map(([v, t]) =>
+    ${!M.transito ? '' : '<div class="whenlbl">Evitar</div>'}
+    <div class="when evitar" ${M.transito ? '' : 'hidden'}>${EVITABLES.slice(0, 4).map(([v, t]) =>
       `<button data-ev="${v}" class="${S.evitar.includes(v) ? 'on' : ''}">${t}</button>`).join('')}</div>
     <div class="whenlbl">Salida</div>
     <div class="when">${whens.map(([v, t]) =>
@@ -1550,6 +1657,20 @@ function pintarRecientes() {
   });
 }
 
+function pintarModos() {
+  $('modos').innerHTML = MODOS.map(m =>
+    `<button data-modo="${m.id}" class="${S.modo === m.id ? 'on' : ''}">` +
+    `<span class="em">${m.icono}</span>${m.nombre}</button>`).join('');
+  $('modos').querySelectorAll('button').forEach(el => el.onclick = () => {
+    if (S.modo === el.dataset.modo) return;
+    S.modo = el.dataset.modo;
+    localStorage.setItem('tt_modo', S.modo);
+    pintarModos();
+    if (S.from && S.to) route();
+  });
+}
+
+pintarModos();
 pintarLugares();
 pintarRecientes();
 
@@ -1845,6 +1966,9 @@ function cargarRutaEnNav(r) {
   // tarda o falla, el viaje arranca igual.
   NAV.camaras = [];
   NAV.limites = [];
+  // Caminando no hay cámaras de velocidad que te importen ni límite que
+  // superar: pedir esos datos sería gastar la consulta y molestar con avisos.
+  if (!modoActual().transito) return;
   buscarCamaras(r.points).then(res => {
     NAV.camaras = camarasSobreRuta(res.camaras || [], NAV.puntos, NAV.acc);
     NAV.limites = limitesSobreRuta(res.limites || [], NAV.puntos, NAV.acc);
@@ -2342,8 +2466,15 @@ $('keySave').onclick = async () => {
   $('keySave').disabled = true;
   $('keySave').textContent = 'Verificando…';
   try {
-    // Consulta mínima para validar la key antes de guardarla.
-    const r = await fetch(`${TT}/search/2/search/obelisco.json?key=${k}&limit=1&countrySet=AR`);
+    // Consulta mínima para validar la key antes de guardarla. Con tope de
+    // tiempo: sin él, una red que no responde deja el botón en "Verificando…"
+    // para siempre y parece que la app se colgó.
+    const corte = new AbortController();
+    const reloj = setTimeout(() => corte.abort(), 12000);
+    const r = await fetch(
+      `${TT}/search/2/search/obelisco.json?key=${k}&limit=1&countrySet=AR`,
+      { signal: corte.signal });
+    clearTimeout(reloj);
     if (!r.ok) throw new Error(r.status === 403
       ? 'La key no es válida. Revisá que la copiaste completa.'
       : 'TomTom respondió ' + r.status + '.');
@@ -2353,8 +2484,10 @@ $('keySave').onclick = async () => {
     start();
   } catch (e) {
     const err = $('keyErr');
-    err.textContent = e.message.includes('Failed to fetch')
-      ? 'Sin conexión a internet.' : e.message;
+    err.textContent =
+      e.name === 'AbortError' ? 'TomTom no respondió. Revisá la conexión y reintentá.'
+      : /Failed to fetch|NetworkError/i.test(e.message) ? 'Sin conexión a internet.'
+      : e.message || 'No se pudo verificar la clave.';
     err.classList.remove('hidden');
   } finally {
     $('keySave').disabled = false;
@@ -2372,6 +2505,81 @@ $('resetKey').onclick = e => {
   $('keyErr').classList.add('hidden');
   $('setup').classList.remove('hidden');
 };
+
+
+/* ============================================================
+   Ubicaciones compartidas
+   ============================================================
+   Alguien te manda un punto por WhatsApp y querés ir ahí. Puede llegar de tres
+   formas: pegado en el buscador, abriendo el enlace con la app, o como un link
+   corto de Google que no trae la coordenada adentro y hay que expandir.
+   ============================================================ */
+
+/** Los enlaces cortos hay que seguirlos hasta el final para ver el destino. */
+async function expandirEnlaceCorto(url) {
+  const C = window.Capacitor;
+  if (!C || typeof C.registerPlugin !== 'function') return null;
+  let http;
+  try { http = C.registerPlugin('CapacitorHttp'); } catch (_) { return null; }
+  if (!http || typeof http.get !== 'function') return null;
+  try {
+    // Va por el puente nativo justamente para saltear CORS: desde el WebView,
+    // Google no deja leer su respuesta.
+    const r = await http.get({ url, headers: { 'User-Agent': 'Mozilla/5.0' } });
+    return parsearUbicacion(r.url || '')
+        || parsearUbicacion(typeof r.data === 'string' ? r.data : '');
+  } catch (_) { return null; }
+}
+
+/** Toma cualquier texto y, si tiene una ubicación adentro, arma el viaje. */
+async function usarUbicacionCompartida(texto, etiqueta) {
+  let u = parsearUbicacion(texto);
+
+  if (!u && esEnlaceCorto(texto)) {
+    showMsg('Abriendo el enlace compartido…');
+    u = await expandirEnlaceCorto(texto.match(/https?:\/\/\S+/)[0]);
+    if (!u) {
+      showMsg('Ese enlace corto de Google no se puede abrir desde acá. Abrilo en '
+            + 'el navegador y compartí la dirección que aparece arriba.');
+      return false;
+    }
+  }
+  if (!u) return false;
+
+  const nombre = u.nombre || etiqueta || `${u.lat.toFixed(5)}, ${u.lon.toFixed(5)}`;
+  irA({ lat: u.lat, lon: u.lon, label: nombre });
+  showMsg('Destino tomado de la ubicación compartida.');
+  return true;
+}
+
+/* Pegar en el buscador: el camino que siempre funciona, en la app y en la web. */
+$('toInput').addEventListener('paste', e => {
+  const texto = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+  if (parsearUbicacion(texto) || esEnlaceCorto(texto)) {
+    e.preventDefault();
+    $('toInput').value = 'Leyendo ubicación…';
+    usarUbicacionCompartida(texto).then(ok => {
+      if (!ok) $('toInput').value = '';
+    });
+  }
+});
+
+/* Abrir la app desde un enlace: geo: o un link de Maps. */
+(function conectarEnlacesEntrantes() {
+  const C = window.Capacitor;
+  if (!C || typeof C.registerPlugin !== 'function') return;
+  let app;
+  try { app = C.registerPlugin('App'); } catch (_) { return; }
+  if (!app) return;
+
+  const atender = url => { if (url) usarUbicacionCompartida(url); };
+  if (typeof app.getLaunchUrl === 'function') {
+    app.getLaunchUrl().then(r => atender(r && r.url)).catch(() => {});
+  }
+  if (typeof app.addListener === 'function') {
+    app.addListener('appUrlOpen', d => atender(d && d.url));
+  }
+})();
 
 /* ============================================================
    Botón Atrás de Android
