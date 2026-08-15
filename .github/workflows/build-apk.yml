@@ -30,6 +30,15 @@ jobs:
       - name: Android SDK
         uses: android-actions/setup-android@v3
 
+      # ORDEN IMPORTANTE: los tests van ANTES de inyectar la clave. Uno de
+      # ellos verifica que no haya ninguna API key commiteada, y si corriera
+      # despues de la inyeccion encontraria la que el propio workflow acaba
+      # de escribir y fallaria siempre.
+      - name: Correr los tests
+        run: |
+          node verificar.js
+          node verificar-nav.js
+
       - name: Inyectar la API Key desde el secreto
         env:
           TOMTOM_KEY: ${{ secrets.TOMTOM_KEY }}
@@ -38,13 +47,8 @@ jobs:
             sed -i "s|const KEY_EMBEBIDA = '[^']*'|const KEY_EMBEBIDA = '$TOMTOM_KEY'|" www/index.html
             echo "Clave tomada del secreto del repositorio."
           else
-            echo "Sin secreto TOMTOM_KEY: se usa la clave del archivo."
+            echo "Sin secreto TOMTOM_KEY: la app la va a pedir al abrirse."
           fi
-
-      - name: Correr los tests
-        run: |
-          node verificar.js
-          node verificar-nav.js
 
       - name: Instalar dependencias
         run: npm install
