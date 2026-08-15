@@ -59,7 +59,11 @@ button,input{font-family:inherit;font-size:16px}
 .hidden{display:none!important}
 
 /* ---------- mapa ---------- */
-#map{flex:1;background:#11151b;min-height:190px}
+#mapwrap{position:relative;flex:1;display:flex;min-height:190px}
+#map{flex:1;background:#11151b}
+#btnTema{position:absolute;top:10px;right:10px;z-index:600;width:42px;height:42px;
+  border-radius:12px;border:1px solid var(--line);background:rgba(23,27,34,.92);
+  color:var(--txt);font-size:19px;line-height:1;box-shadow:0 4px 14px rgba(0,0,0,.4)}
 .leaflet-control-attribution{background:rgba(14,17,22,.82)!important;color:#6b7484!important;
   font-size:9.5px!important}
 .leaflet-control-attribution a{color:#8b95a6!important}
@@ -121,7 +125,8 @@ button,input{font-family:inherit;font-size:16px}
 body.navegando #top,
 body.navegando #panel,
 body.navegando #msg{display:none}
-body.navegando #map{flex:1}
+body.navegando #mapwrap{flex:1}
+body.navegando #btnTema{top:auto;bottom:150px}
 
 #nav{position:fixed;inset:0;z-index:1500;pointer-events:none;
      display:flex;flex-direction:column;justify-content:space-between}
@@ -195,7 +200,10 @@ body.navegando #map{flex:1}
 </div>
 
 <div id="msg" class="hidden"></div>
-<div id="map"></div>
+<div id="mapwrap">
+  <div id="map"></div>
+  <button id="btnTema" title="Cambiar entre mapa claro y oscuro">☀</button>
+</div>
 
 <div id="panel">
   <div class="grab"></div>
@@ -525,10 +533,71 @@ const TT = 'https://api.tomtom.com';
 const map = L.map('map', { zoomControl: false, attributionControl: true })
   .setView([-34.6037, -58.3816], 12);
 
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  maxZoom: 19, subdomains: 'abcd',
-  attribution: '&copy; OpenStreetMap &copy; CARTO &middot; Tránsito por TomTom'
-}).addTo(map);
+/* ---------------------------------------------------------------------------
+   Tema del mapa
+   ---------------------------------------------------------------------------
+   El mapa oscuro es lindo de noche e ilegible al mediodía con el sol pegando
+   en la pantalla. Y el claro encandila manejando a la noche. Por eso el modo
+   por defecto es automático según la hora, con un botón para forzarlo cuando
+   la app se equivoca — un día nublado, un túnel, un estacionamiento.
+   ------------------------------------------------------------------------ */
+const TEMAS = {
+  claro: {
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    ruta: '#1d4ed8', alterna: '#94a3b8', fondo: '#e8e6e1', icono: '☀',
+  },
+  oscuro: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    ruta: '#4da3ff', alterna: '#6b7484', fondo: '#11151b', icono: '☾',
+  },
+};
+
+let capaMapa = null;
+let temaActual = 'claro';
+
+/** 'auto' | 'claro' | 'oscuro' — lo elegido por el usuario, no lo aplicado. */
+let preferenciaTema = localStorage.getItem('tt_tema') || 'auto';
+
+function temaSegunHora() {
+  const h = new Date().getHours();
+  return (h >= 20 || h < 7) ? 'oscuro' : 'claro';
+}
+
+function aplicarTema() {
+  const nuevo = preferenciaTema === 'auto' ? temaSegunHora() : preferenciaTema;
+  if (capaMapa && nuevo === temaActual) return;
+  temaActual = nuevo;
+
+  const t = TEMAS[temaActual];
+  if (capaMapa) map.removeLayer(capaMapa);
+  capaMapa = L.tileLayer(t.url, {
+    maxZoom: 19, subdomains: 'abcd',
+    attribution: '&copy; OpenStreetMap &copy; CARTO &middot; Tránsito por TomTom',
+  }).addTo(map);
+  capaMapa.setZIndex(0);
+
+  document.getElementById('map').style.background = t.fondo;
+  $('btnTema').textContent = preferenciaTema === 'auto' ? t.icono
+    : (temaActual === 'claro' ? '☀' : '☾');
+  $('btnTema').style.opacity = preferenciaTema === 'auto' ? '.75' : '1';
+
+  if (S.routes.length) draw();     // la ruta cambia de color según el tema
+}
+
+$('btnTema').onclick = () => {
+  // auto -> claro -> oscuro -> auto
+  preferenciaTema = preferenciaTema === 'auto' ? 'claro'
+                  : preferenciaTema === 'claro' ? 'oscuro' : 'auto';
+  localStorage.setItem('tt_tema', preferenciaTema);
+  capaMapa = capaMapa;             // forzar recálculo
+  temaActual = null;
+  aplicarTema();
+};
+
+aplicarTema();
+// En modo automático se revisa cada 10 minutos: un viaje largo puede cruzar
+// el atardecer y el mapa tiene que acompañar.
+setInterval(() => { if (preferenciaTema === 'auto') aplicarTema(); }, 600000);
 
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
@@ -693,17 +762,25 @@ function draw() {
   S.markers.forEach(m => map.removeLayer(m));
   S.layers = []; S.markers = [];
 
+  const T = TEMAS[temaActual] || TEMAS.oscuro;
+
   // Alternativas primero, apagadas, para que la elegida quede arriba.
   S.routes.forEach((r, i) => {
     if (i === S.picked) return;
     S.layers.push(L.polyline(r.points, {
-      color: '#6b7484', weight: 4, opacity: .5
+      color: T.alterna, weight: 4, opacity: .55
     }).addTo(map).on('click', () => { S.picked = i; refresh(); }));
   });
 
   const r = S.routes[S.picked];
+  // Contorno bajo la ruta: sobre un mapa claro, una línea de color plano se
+  // confunde con las avenidas del propio mapa. El borde la despega.
   S.layers.push(L.polyline(r.points, {
-    color: '#4da3ff', weight: 7, opacity: .95, lineJoin: 'round'
+    color: temaActual === 'claro' ? '#ffffff' : '#0b1220',
+    weight: 12, opacity: .9, lineJoin: 'round', lineCap: 'round',
+  }).addTo(map));
+  S.layers.push(L.polyline(r.points, {
+    color: T.ruta, weight: 7, opacity: .98, lineJoin: 'round', lineCap: 'round',
   }).addTo(map));
 
   // Encima, los tramos congestionados con su color real.
@@ -715,7 +792,8 @@ function draw() {
   });
 
   const pin = (ll, color) => L.circleMarker(ll, {
-    radius: 8, color: '#0e1116', weight: 3, fillColor: color, fillOpacity: 1
+    radius: 8, weight: 3, fillColor: color, fillOpacity: 1,
+    color: temaActual === 'claro' ? '#ffffff' : '#0e1116',
   }).addTo(map);
   S.markers.push(pin(r.points[0], '#3fb950'));
   S.markers.push(pin(r.points[r.points.length - 1], '#4da3ff'));
