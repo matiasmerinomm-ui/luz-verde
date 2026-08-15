@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#0b1310">
+<meta name="theme-color" content="#eef5f0">
 <title>Luz Verde</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
@@ -15,9 +15,12 @@
    pertenece a la misma familia sin que se note por qué.
    ------------------------------------------------------------------------ */
 :root{
-  --verde:#16a34a; --verde-cl:#4ade80; --verde-br:#86efac; --verde-os:#0d5c2c;
-  --bg:#0b1310; --card:#121c17; --card2:#182620; --line:#25382e;
-  --txt:#e8f0ea; --dim:#8fa89a; --accent:#22c55e;
+  --verde:#15873d; --verde-cl:#22c55e; --verde-br:#86efac; --verde-os:#0d5c2c;
+  /* Fondo menta muy claro en vez de casi negro: de día se lee sin esfuerzo y
+     acompaña al verde de marca en vez de pelearse con él. La navegación sí
+     mantiene el cartel oscuro, que es donde el contraste importa manejando. */
+  --bg:#eef5f0; --card:#ffffff; --card2:#f3f8f5; --line:#d5e5da;
+  --txt:#0f2318; --dim:#5d7d6b; --accent:#15873d;
   --ok:#22c55e; --warn:#eab308; --bad:#f97316; --crit:#ef4444;
   --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
 }
@@ -42,7 +45,7 @@ button,input{font-family:inherit;font-size:16px}
   background:var(--card);color:var(--txt);outline:none}
 .field:focus{border-color:var(--accent)}
 .btn{width:100%;padding:15px;border:0;border-radius:12px;background:var(--accent);
-  color:#04210f;font-weight:700;font-size:16px;margin-top:12px}
+  color:#fff;font-weight:700;font-size:16px;margin-top:12px}
 .btn:disabled{opacity:.45}
 .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--dim);font-weight:600}
 
@@ -55,11 +58,11 @@ button,input{font-family:inherit;font-size:16px}
 .dot{width:9px;height:9px;border-radius:50%;flex:none}
 .inputrow input{flex:1;border:0;background:transparent;color:var(--txt);
   padding:13px 0;outline:none;min-width:0}
-.inputrow input::placeholder{color:#5c6675}
+.inputrow input::placeholder{color:#9ab3a5}
 .iconbtn{border:0;background:transparent;color:var(--dim);padding:8px;font-size:17px;flex:none}
-#sug{position:absolute;left:12px;right:12px;background:var(--card2);
+#sug{position:absolute;left:12px;right:12px;background:var(--card);
   border:1px solid var(--line);border-radius:12px;overflow:hidden;z-index:1200;
-  box-shadow:0 12px 32px rgba(0,0,0,.5);max-height:52vh;overflow-y:auto}
+  box-shadow:0 14px 34px rgba(15,35,24,.16);max-height:52vh;overflow-y:auto}
 #sug div{padding:13px 14px;border-bottom:1px solid var(--line)}
 #sug div:last-child{border:0}
 #sug b{display:block;font-weight:600;font-size:14.5px}
@@ -87,23 +90,22 @@ button,input{font-family:inherit;font-size:16px}
 /* La ruta y los marcadores quedan fuera del filtro: si se tiñen también,
    el contraste que los hace legibles se pierde. */
 .leaflet-overlay-pane,.leaflet-marker-pane,.leaflet-tooltip-pane{filter:none}
-.leaflet-tooltip{background:var(--card);color:var(--txt);border:1px solid var(--line);
+.leaflet-tooltip{background:#fff;color:var(--txt);border:1px solid var(--line);
   border-radius:8px;font-size:12px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.5)}
 .leaflet-tooltip-top:before{border-top-color:var(--line)}
 
 /* ---------- mapa ---------- */
 #mapwrap{position:relative;flex:1;display:flex;min-height:190px}
-#map{flex:1;background:#0f1a15}
+#map{flex:1;background:#e8efe9}
 #btnTema,#btnVoz,#btnAjustes{position:absolute;right:10px;z-index:600;width:42px;height:42px;
-  border-radius:12px;border:1px solid var(--line);background:rgba(18,28,23,.94);
-  color:var(--txt);font-size:19px;line-height:1;box-shadow:0 4px 14px rgba(0,0,0,.45)}
+  border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.95);
+  color:var(--txt);font-size:19px;line-height:1;box-shadow:0 4px 14px rgba(15,35,24,.18)}
 #btnTema{top:10px}
 #btnVoz{top:60px}
 #btnAjustes{top:110px}
-.leaflet-control-attribution{background:rgba(14,17,22,.82)!important;color:#6b7484!important;
-  font-size:9.5px!important}
+.leaflet-control-attribution{display:none!important}
 .leaflet-control-attribution a{color:#8b95a6!important}
-.leaflet-bar a{background:var(--card)!important;color:var(--txt)!important;
+.leaflet-bar a{background:#fff!important;color:var(--txt)!important;
   border-color:var(--line)!important}
 
 /* ---------- panel de resultados ---------- */
@@ -111,7 +113,7 @@ button,input{font-family:inherit;font-size:16px}
   animation:subirPanel .3s cubic-bezier(.2,.8,.3,1) both;
   border-radius:18px 18px 0 0;padding:14px 16px calc(var(--safe-bot) + 14px);
   max-height:56vh;overflow-y:auto;z-index:800}
-.grab{width:38px;height:4px;border-radius:3px;background:#39414f;margin:0 auto 12px}
+.grab{width:38px;height:4px;border-radius:3px;background:#c3d8ca;margin:0 auto 12px}
 .eta{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
 .eta .big{font-size:40px;font-weight:750;letter-spacing:-.035em;line-height:1}
 .eta .unit{font-size:17px;color:var(--dim);font-weight:600}
@@ -125,7 +127,7 @@ button,input{font-family:inherit;font-size:16px}
 
 .alt{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:12px;
   border:1px solid var(--line);margin-top:9px}
-.alt.on{border-color:var(--accent);background:#132a1d}
+.alt.on{border-color:var(--accent);background:#e7f6ec}
 .alt .stripe{width:4px;height:32px;border-radius:3px;flex:none}
 .alt .txt{flex:1;min-width:0}
 .alt .t1{font-weight:650;font-size:15px}
@@ -137,7 +139,7 @@ button,input{font-family:inherit;font-size:16px}
 .when button{white-space:nowrap;padding:8px 14px;border-radius:99px;
   border:1px solid var(--line);background:transparent;color:var(--dim);
   font-size:13px;font-weight:600}
-.when button.on{background:var(--accent);border-color:var(--accent);color:#04210f}
+.when button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 
 .steps{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
 .steps summary{color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;list-style:none}
@@ -147,7 +149,7 @@ button,input{font-family:inherit;font-size:16px}
 .steps li b{color:var(--txt);font-weight:600}
 
 #msg{padding:11px 14px;margin:10px 12px;border-radius:11px;font-size:13.5px;
-  background:#1a2e22;border:1px solid #2f5a3f;color:#b9f0cd;
+  background:#e7f6ec;border:1px solid #b7e0c5;color:#14562c;
   animation:subirPanel .25s ease both}
 #hint{padding:6px 2px 10px;color:var(--dim);font-size:14px}
 #hintTexto{text-align:center;font-size:13px;margin:16px 0 0}
@@ -164,7 +166,7 @@ button,input{font-family:inherit;font-size:16px}
 .lug .nom{font-weight:650;font-size:14px}
 .lug .det{font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;max-width:150px}
-.lug.vacia .det{color:#5c6f63;font-style:italic}
+.lug.vacia .det{color:#9ab3a5;font-style:italic}
 .lug.nuevo{align-items:center;justify-content:center;min-width:64px;
   border-style:dashed;color:var(--dim);font-size:22px}
 
@@ -176,14 +178,14 @@ button,input{font-family:inherit;font-size:16px}
 .rec .txt{flex:1;min-width:0}
 .rec .t1{color:var(--txt);font-size:14.5px;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis}
-.rec .borrar{color:#5c6f63;font-size:15px;padding:4px 6px;flex:none}
+.rec .borrar{color:#9ab3a5;font-size:15px;padding:4px 6px;flex:none}
 .sechead{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
   font-weight:600;color:var(--dim);margin:16px 0 2px}
 .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line);
   border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;
   vertical-align:-3px;margin-right:7px}
 @keyframes sp{to{transform:rotate(360deg)}}
-.foot{color:#5c6675;font-size:11px;text-align:center;margin-top:14px;line-height:1.5}
+.foot{color:#8aa697;font-size:11px;text-align:center;margin-top:14px;line-height:1.5}
 .btn.iniciar{background:var(--verde);color:#fff;margin-top:14px;font-size:17px;
   box-shadow:0 6px 18px rgba(22,163,74,.35);transition:transform .12s}
 .btn.iniciar:active{transform:scale(.97)}
@@ -192,11 +194,11 @@ button,input{font-family:inherit;font-size:16px}
   font-weight:600;margin-top:16px}
 .viapor{color:var(--txt);font-size:14px;margin-top:7px;font-weight:600}
 .tagpeaje{display:inline-block;margin-top:7px;padding:4px 10px;border-radius:8px;
-  background:#2c2413;border:1px solid #5f4f22;color:#f0d489;font-size:12px;font-weight:600}
+  background:#fdf3d8;border:1px solid #e6cf90;color:#7a5c10;font-size:12px;font-weight:600}
 .when.evitar button.on{background:var(--bad);border-color:var(--bad);color:#2a1205}
 
 /* ---------- hoja de ajustes ---------- */
-#ajustes{position:fixed;inset:0;z-index:1900;background:rgba(4,10,7,.62);
+#ajustes{position:fixed;inset:0;z-index:1900;background:rgba(10,30,19,.45);
   display:flex;align-items:flex-end}
 #ajustes .hoja{width:100%;background:var(--card);border-radius:20px 20px 0 0;
   padding:12px 18px calc(var(--safe-bot) + 18px);max-height:88vh;overflow-y:auto;
@@ -210,6 +212,10 @@ button,input{font-family:inherit;font-size:16px}
 .camp input[type=range]{width:100%;accent-color:var(--verde)}
 select.field{appearance:none;background-image:none}
 .ayuda{color:var(--dim);font-size:12px;margin:-10px 0 16px;line-height:1.5}
+/* Los créditos no son decorativos: la licencia de OpenStreetMap obliga a
+   atribuir. Se pueden mover fuera del mapa, pero no eliminar. */
+.creditos{color:#8aa697;font-size:10.5px;line-height:1.6;margin:22px 0 0;text-align:center}
+.creditos a{color:#8aa697;text-decoration:underline}
 
 /* ---------- modo navegación ---------- */
 body.navegando #top,
@@ -234,7 +240,7 @@ body.navegando #btnAjustes{display:none}
 .chip{animation:aparecer .25s ease both}
 @keyframes aparecer{from{transform:translateX(-14px);opacity:0}to{transform:none;opacity:1}}
 
-#navTop{background:linear-gradient(160deg,#12633a,#0d4f2c);margin:calc(var(--safe-top) + 8px) 8px 0;border-radius:16px;
+#navTop{background:linear-gradient(160deg,#15873d,#0d5c2c);margin:calc(var(--safe-top) + 8px) 8px 0;border-radius:16px;
   padding:15px 17px;display:flex;align-items:center;gap:15px;
   box-shadow:0 10px 30px rgba(0,0,0,.55)}
 #navIcono{font-size:40px;line-height:1;color:#bbf7d0;flex:none;width:46px;text-align:center}
@@ -245,14 +251,14 @@ body.navegando #btnAjustes{display:none}
 
 #navMedio{margin:0 8px;display:flex;flex-direction:column;gap:7px;align-items:flex-start}
 .chip{padding:9px 14px;border-radius:12px;font-size:13.5px;font-weight:650;
-  box-shadow:0 6px 20px rgba(0,0,0,.5);display:flex;align-items:center;gap:8px}
+  box-shadow:0 6px 20px rgba(0,0,0,.45);display:flex;align-items:center;gap:8px}
 .chip.camara{background:#3a1d1d;border:1px solid #7d3a35;color:#ffc7ba}
 .chip.recalc{background:#2a2410;border:1px solid #6d5a1e;color:#f0d489}
 .chip .lim{background:#fff;color:#b3261e;border-radius:50%;width:26px;height:26px;
   display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;
   border:2px solid #b3261e}
 
-#navBottom{background:var(--card);border-top:1px solid var(--line);
+#navBottom{background:#0f1d15;color:#e8f0ea;border-top:1px solid #24382c;
   border-radius:18px 18px 0 0;padding:26px 16px calc(var(--safe-bot) + 13px);
   display:flex;align-items:center;gap:14px}
 #navBottom .blq{text-align:center;min-width:62px}
@@ -269,18 +275,18 @@ body.navegando #btnAjustes{display:none}
 .chip.exceso{background:#3b1414;border:1px solid #8a2f2f;color:#ffc2c2}
 #navBottom .blq b{display:block;font-size:21px;font-weight:700;line-height:1.15;
   font-variant-numeric:tabular-nums}
-#navBottom .blq small{color:var(--dim);font-size:11px}
+#navBottom .blq small{color:#8fae9c;font-size:11px}
 #navBottom .crece{flex:1}
-#navSalir{border:0;border-radius:12px;background:#3a2220;color:#ffb4a8;
+#navSalir{border:0;border-radius:12px;background:#43201c;color:#ffb4a8;
   padding:12px 18px;font-weight:700;font-size:15px}
 
 /* Marcador del vehículo. El triángulo plano de antes se veía como un recorte
    de papel; esto es un disco con aro blanco, cono de rumbo y sombra propia.
    La transición hace que se deslice entre lecturas del GPS en vez de saltar
    de golpe cada segundo. */
-.burb{background:var(--card);color:var(--txt);border:1.5px solid var(--line);
+.burb{background:#fff;color:var(--txt);border:1.5px solid var(--line);
   border-radius:999px;padding:5px 11px;font-size:13px;font-weight:700;
-  white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.45);width:auto!important;
+  white-space:nowrap;box-shadow:0 4px 14px rgba(15,35,24,.28);width:auto!important;
   height:auto!important;margin:0!important;transform:translate(-50%,-50%)}
 .burb.on{background:var(--verde);border-color:var(--verde-cl);color:#fff}
 .burb .pj{display:block;font-size:10px;font-weight:600;opacity:.85;font-style:normal}
@@ -338,7 +344,6 @@ body.navegando #btnAjustes{display:none}
     <div id="lugares"></div>
     <div id="recientes"></div>
     <p id="hintTexto">Escribí una dirección o tocá un acceso rápido.</p>
-    <div class="foot"><a href="#" id="resetKey">Cambiar la API Key</a></div>
   </div>
   <div id="result" class="hidden"></div>
 </div>
@@ -360,6 +365,12 @@ body.navegando #btnAjustes{display:none}
 
     <button class="btn ghost" id="probarVoz">Escuchar una prueba</button>
     <button class="btn" id="cerrarAjustes">Listo</button>
+
+    <p class="creditos">
+      Mapas © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+      y CARTO · Tránsito y rutas de TomTom · Cámaras y límites de OpenStreetMap.
+      <a href="#" id="resetKey">Cambiar la API Key</a>
+    </p>
   </div>
 </div>
 
@@ -1550,7 +1561,19 @@ function cargarVoces() {
   const peso = v => (/es[-_]AR/i.test(v.lang) ? 0
                    : /es[-_](UY|CL|419|MX)/i.test(v.lang) ? 1
                    : /es[-_]US/i.test(v.lang) ? 2 : 3);
-  vocesEs = vs.filter(v => /^es/i.test(v.lang)).sort((a, b) => peso(a) - peso(b));
+  // Android suele exponer la misma voz varias veces (una por motor instalado).
+  // Sin deduplicar, el selector muestra "Español (Argentina)" tres veces y
+  // parece roto.
+  const vistas = new Set();
+  vocesEs = vs
+    .filter(v => /^es/i.test(v.lang))
+    .filter(v => {
+      const clave = (v.name + '|' + v.lang).toLowerCase();
+      if (vistas.has(clave)) return false;
+      vistas.add(clave);
+      return true;
+    })
+    .sort((a, b) => peso(a) - peso(b));
 
   vozEs = vocesEs.find(v => v.name === vozElegida) || vocesEs[0] || null;
   pintarSelectorVoz();
@@ -2066,6 +2089,54 @@ $('resetKey').onclick = e => {
   $('keyErr').classList.add('hidden');
   $('setup').classList.remove('hidden');
 };
+
+/* ============================================================
+   Botón Atrás de Android
+   ============================================================
+   Por defecto, el botón físico cierra la app de una: estás navegando, lo tocás
+   sin querer y perdiste el viaje. Acá retrocede de a una pantalla, como
+   cualquier app, y recién sale cuando ya no queda nada atrás.
+   ============================================================ */
+function retroceder() {
+  if (!$('ajustes').classList.contains('hidden')) {
+    $('ajustes').classList.add('hidden');
+    return true;
+  }
+  if (NAV.on) {
+    terminarViaje();
+    return true;
+  }
+  if (!$('sug').classList.contains('hidden')) {
+    $('sug').classList.add('hidden');
+    return true;
+  }
+  if (S.routes.length || S.to) {
+    $('clearBtn').click();            // vuelve a la pantalla de escribir destino
+    return true;
+  }
+  return false;                        // nada que deshacer: que salga
+}
+
+(function conectarAtras() {
+  const C = window.Capacitor;
+  const plug = C && typeof C.registerPlugin === 'function'
+    ? (() => { try { return C.registerPlugin('App'); } catch (_) { return null; } })()
+    : null;
+
+  if (plug && typeof plug.addListener === 'function') {
+    plug.addListener('backButton', () => {
+      if (!retroceder() && typeof plug.exitApp === 'function') plug.exitApp();
+    });
+    return;
+  }
+
+  // En el navegador no hay botón físico, pero sí el gesto de volver. Se
+  // mantiene una entrada de más en el historial para poder interceptarlo.
+  history.pushState({ app: true }, '');
+  window.addEventListener('popstate', () => {
+    if (retroceder()) history.pushState({ app: true }, '');
+  });
+})();
 
 function start() {
   locate(true);

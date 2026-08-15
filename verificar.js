@@ -512,6 +512,45 @@ test('la prueba de voz se escucha aunque este silenciada', () => {
 });
 
 /* ------------------------------------------------------------------ */
+console.log('\nBotón Atrás');
+
+test('el boton atras no cierra la app de una', () => {
+  assert.ok(/function retroceder\(\)/.test(js), 'falta el manejo del boton atras');
+  const f = js.match(/function retroceder\(\)[\s\S]*?\n\}/)[0];
+  // El orden importa: lo más "adentro" se cierra primero.
+  const orden = ['ajustes', 'NAV.on', 'sug', 'S.routes.length'];
+  let pos = -1;
+  for (const clave of orden) {
+    const i = f.indexOf(clave);
+    assert.ok(i > pos, 'orden de retroceso incorrecto en: ' + clave);
+    pos = i;
+  }
+  assert.ok(/return false/.test(f), 'sin salida, la app nunca se podria cerrar');
+});
+
+test('navegando, atras termina el viaje en vez de salir', () => {
+  const f = js.match(/function retroceder\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/if \(NAV\.on\)[\s\S]{0,60}terminarViaje\(\)/.test(f),
+    'tocar atras sin querer no puede perderte el viaje entero');
+});
+
+test('el navegador tambien intercepta el gesto de volver', () => {
+  assert.ok(/history\.pushState/.test(js) && /popstate/.test(js),
+    'en GitHub Pages el gesto de volver sacaria de la app');
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\nAtribución');
+
+test('los creditos de OpenStreetMap siguen presentes', () => {
+  // La licencia ODbL obliga a atribuir. Se puede mover fuera del mapa, pero
+  // borrarla es incumplir la licencia de los datos.
+  assert.ok(/openstreetmap\.org\/copyright/i.test(html),
+    'falta el enlace de atribución de OpenStreetMap');
+  assert.ok(/OpenStreetMap/.test(html) && /TomTom/.test(html));
+});
+
+/* ------------------------------------------------------------------ */
 console.log('\nLugares guardados y recientes');
 
 test('todo se guarda en el telefono, no en un servidor', () => {
