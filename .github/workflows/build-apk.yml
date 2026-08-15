@@ -1,10 +1,12 @@
 name: Compilar APK
 
+# Corre en cada push a main, y tambien a mano desde la pestana Actions.
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+# Necesario para publicar el APK como Release descargable desde el celular.
 permissions:
   contents: write
 
@@ -32,13 +34,25 @@ jobs:
 
       # ORDEN IMPORTANTE: los tests van ANTES de inyectar la clave. Uno de
       # ellos verifica que no haya ninguna API key commiteada, y si corriera
-      # despues de la inyeccion encontraria la que el propio workflow acaba
-      # de escribir y fallaria siempre.
+      # despues de la inyeccion encontraria la que el propio workflow acaba de
+      # escribir y fallaria siempre.
       - name: Correr los tests
         run: |
           node verificar.js
           node verificar-nav.js
 
+      # La app se ejecuta en los tres entornos donde tiene que vivir. El del
+      # medio es el que importa: dentro del APK, Capacitor devuelve un plugin
+      # falso para lo que no este instalado y solo revienta al usarlo. Una app
+      # puede cargar perfecto en el navegador y morir en el telefono.
+      - name: Verificar que la app carga en todos los entornos
+        run: |
+          node verificar-carga.js www/index.html web
+          node verificar-carga.js www/index.html apkPelado
+          node verificar-carga.js www/index.html apkCompleto
+
+      # Va despues de los tests, a proposito. Reemplaza la constante vacia por
+      # la clave del secreto: queda dentro del APK pero nunca en el repositorio.
       - name: Inyectar la API Key desde el secreto
         env:
           TOMTOM_KEY: ${{ secrets.TOMTOM_KEY }}
@@ -53,6 +67,8 @@ jobs:
       - name: Instalar dependencias
         run: npm install
 
+      # El proyecto android/ no se versiona: se genera aca. Asi el repo queda
+      # limpio y no hay que resolver conflictos en archivos autogenerados.
       - name: Generar el proyecto Android
         run: npx cap add android
 
@@ -71,12 +87,35 @@ jobs:
           echo "--- permisos declarados ---"
           grep -o 'android.permission.[A-Z_]*' "$M" | sort -u
 
+      # Sin esto la app no aparece en "Abrir con" cuando tocás un link de Maps
+      # que te mandaron por WhatsApp: Android no sabe que sabemos leerlo. El
+      # código para interpretarlo ya estaba; faltaba que el sistema nos ofrezca.
+      - name: Declarar que sabemos abrir ubicaciones compartidas
+        run: python3 herramientas/intent-filters.py
+
       - name: Generar iconos y splash
         run: npx capacitor-assets generate --android
         continue-on-error: true
 
       - name: Sincronizar la app web
         run: npx cap sync android
+
+      # Guarda final: confirmar que la clave viajo hasta el APK. Sin esto, un
+      # error de rutas o de orden pasa desapercibido y la app instalada pide la
+      # clave a mano, que es justo lo que el secreto viene a evitar.
+      - name: Verificar que la clave llego al APK
+        env:
+          TOMTOM_KEY: ${{ secrets.TOMTOM_KEY }}
+        run: |
+          A=android/app/src/main/assets/public/index.html
+          test -f "$A" || { echo "no se copio la app al proyecto Android"; exit 1; }
+          if [ -n "$TOMTOM_KEY" ]; then
+            if grep -q "const KEY_EMBEBIDA = '';" "$A"; then
+              echo "ERROR: hay secreto TOMTOM_KEY pero el APK quedo sin clave."
+              exit 1
+            fi
+            echo "OK: el APK lleva la clave adentro."
+          fi
 
       - name: Compilar el APK
         run: |
@@ -91,6 +130,7 @@ jobs:
              salida/luz-verde-v${{ github.run_number }}.apk
           ls -lh salida/
 
+      # Artefacto: queda en la pestana Actions (requiere estar logueado).
       - name: Subir como artefacto
         uses: actions/upload-artifact@v4
         with:
@@ -98,12 +138,20 @@ jobs:
           path: salida/*.apk
           retention-days: 30
 
+      # Release: es el que sirve de verdad. Genera un link directo que se
+      # abre desde el celular sin loguearse.
       - name: Publicar Release descargable
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
           name: Luz Verde v${{ github.run_number }}
           body: |
-            APK listo para instalar en Android. Toca el archivo .apk de abajo
-            desde el celular y aceptale a Android instalar de esta fuente.
+            APK listo para instalar en Android.
+
+            **Desde el celular:** tocá el archivo `.apk` de acá abajo.
+            Android va a pedir permiso para instalar apps de esta fuente —
+            aceptalo. Es porque no viene de Play Store, no porque haya
+            algo mal.
+
+            La primera vez la app te pide tu API Key de TomTom.
           files: salida/*.apk
