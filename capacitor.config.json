@@ -6,11 +6,11 @@
     "androidScheme": "https"
   },
   "android": {
-    "backgroundColor": "#0e1116"
+    "backgroundColor": "#0b1310"
   },
   "plugins": {
     "SplashScreen": {
-      "backgroundColor": "#0e1116",
+      "backgroundColor": "#0b1310",
       "launchAutoHide": true,
       "launchShowDuration": 900
     }

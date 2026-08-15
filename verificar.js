@@ -331,10 +331,36 @@ test('no quedan llamadas sueltas a draw/render fuera de refresh', () => {
     'hay llamadas encadenadas fuera de refresh(): ' + sueltas.join(' | '));
 });
 
-test('cada magnitud de demora tiene color', () => {
-  const jam = js.match(/const JAM = \[([\s\S]*?)\];/)[1];
-  const n = (jam.match(/\{\s*c:/g) || []).length;
-  assert.strictEqual(n, 5, 'TomTom usa magnitudeOfDelay 0..4, hay ' + n + ' colores');
+test('la congestion se mide en segundos por km, no con el enum de TomTom', () => {
+  // magnitudeOfDelay 0 significa "desconocido", no "leve" — usarlo como escala
+  // pinta de amarillo tramos de los que no se sabe nada. Y TomTom no publica a
+  // cuantos segundos equivale cada nivel, asi que no es explicable.
+  assert.ok(!/const JAM\b/.test(js), 'quedo la escala vieja basada en el enum');
+  const esc = js.match(/const ESCALA_DEMORA = \[([\s\S]*?)\];/);
+  assert.ok(esc, 'falta ESCALA_DEMORA');
+
+  const umbrales = [...esc[1].matchAll(/hasta:\s*([\d.]+|Infinity)/g)]
+    .map(m => (m[1] === 'Infinity' ? Infinity : +m[1]));
+  assert.ok(umbrales.length >= 3, 'muy pocos niveles');
+  for (let i = 1; i < umbrales.length; i++) {
+    assert.ok(umbrales[i] > umbrales[i - 1], 'los umbrales tienen que ir creciendo');
+  }
+  assert.strictEqual(umbrales[umbrales.length - 1], Infinity,
+    'el ultimo nivel tiene que atrapar todo, si no hay demoras sin color');
+});
+
+test('un corte de calle no se calcula por segundos', () => {
+  const f = js.match(/function clasificarDemora\([\s\S]*?\n\}/)[0];
+  assert.ok(/magnitudeOfDelay === 4/.test(f),
+    'el 4 es cierre de calle: ahi el calculo por segundos no aplica');
+});
+
+test('las demoras insignificantes no se pintan', () => {
+  const f = js.match(/function clasificarDemora\([\s\S]*?\n\}/)[0];
+  assert.ok(/return null/.test(f),
+    'pintar de amarillo una demora de 5 segundos es ruido visual');
+  assert.ok(/metros < 40/.test(f),
+    'un tramo de 20 m da segundos-por-km enormes por division chica');
 });
 
 /* ------------------------------------------------------------------ */
@@ -446,6 +472,94 @@ test('las camaras se piden una vez por ruta, no por posicion', () => {
   assert.ok(!enBucle.includes('buscarCamaras'),
     'consultar Overpass en cada posicion es abuso del servicio y va a fallar');
   assert.ok(js.match(/function cargarRutaEnNav\([\s\S]*?\n\}/)[0].includes('buscarCamaras'));
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\nVoz');
+
+test('se puede elegir entre las voces del telefono', () => {
+  const f = js.match(/function cargarVoces\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/filter\(v => \/\^es\/i\.test\(v\.lang\)\)/.test(f),
+    'tiene que ofrecer todas las voces en español, no solo una');
+  assert.ok(/sort\(/.test(f), 'las rioplatenses deberian ir primero');
+  assert.ok(/localStorage\.getItem\('tt_vozNombre'\)/.test(js),
+    'la voz elegida tiene que sobrevivir al cierre de la app');
+});
+
+test('las voces se recargan cuando Android las entrega', () => {
+  // En Android getVoices() devuelve vacio en el primer llamado. Sin este
+  // evento quedaria siempre la voz por defecto y el selector vacio.
+  assert.ok(/speechSynthesis\.onvoiceschanged = cargarVoces/.test(js),
+    'falta reaccionar a onvoiceschanged');
+});
+
+test('la velocidad de la voz es configurable y se guarda', () => {
+  assert.ok(/u\.rate = velocidadVoz/.test(js), 'la velocidad esta fija en el codigo');
+  assert.ok(/localStorage\.setItem\('tt_vozVel'/.test(js), 'no se guarda la preferencia');
+});
+
+test('sin voces en español lo dice en vez de fallar callado', () => {
+  const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/No hay voces en español/.test(f),
+    'si el telefono no tiene voces, el usuario tiene que enterarse');
+  assert.ok(/Salida de texto a voz/.test(f), 'y saber donde instalarlas');
+});
+
+test('la prueba de voz se escucha aunque este silenciada', () => {
+  const f = js.match(/function probarVoz\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/modoVoz = 'todo'/.test(f) && /modoVoz = antes/.test(f),
+    'probar una voz sin escucharla no sirve de nada, y hay que restaurar el modo');
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\nLugares guardados y recientes');
+
+test('todo se guarda en el telefono, no en un servidor', () => {
+  for (const linea of [/const guardarLugares\s*=.*localStorage\.setItem\('tt_lugares'/,
+                       /const guardarRecientes\s*=.*localStorage\.setItem\('tt_recientes'/,
+                       /let lugares\s*=\s*leerJSON\('tt_lugares'/,
+                       /let recientes\s*=\s*leerJSON\('tt_recientes'/]) {
+    assert.ok(linea.test(js), 'falta o cambió: ' + linea);
+  }
+  // Y que ir a un lugar guardado no dispare ninguna llamada extra: la dirección
+  // de tu casa no tiene por qué salir del teléfono.
+  const irA = js.match(/function irA\([\s\S]*?\n\}/)[0];
+  assert.ok(!/fetch|XMLHttpRequest/.test(irA), 'irA() no debe llamar a ningún servicio');
+});
+
+test('un lugar vacio guarda, uno cargado navega', () => {
+  const f = js.match(/el\.onclick = \(\) => \(lugares\[id\][\s\S]{0,90}/)[0];
+  assert.ok(/irA\(lugares\[id\]\)/.test(f) && /asignarLugar/.test(f),
+    'el mismo boton tiene que servir para guardar y para ir');
+});
+
+test('los recientes se registran al rutear, no al tipear', () => {
+  // Si se registrara mientras escribis, la lista se llena de direcciones a
+  // medio escribir y de lugares que descartaste.
+  const f = js.match(/function route\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/registrarReciente\(S\.to\)/.test(f), 'no registra el destino usado');
+  const doSug = js.match(/const doSuggest = debounce\([\s\S]*?\n\}, \d+\);/)[0];
+  assert.ok(!/registrarReciente/.test(doSug), 'no debe registrarse desde el autocompletado');
+});
+
+test('no se registran recientes durante la navegacion', () => {
+  // Un recalculo por desvio no es un destino nuevo que el usuario eligio.
+  assert.ok(/if \(!NAV\.on\) registrarReciente/.test(js),
+    'cada recalculo ensuciaria la lista de recientes');
+});
+
+test('los recientes no se duplican y tienen tope', () => {
+  const f = js.match(/function registrarReciente\([\s\S]*?\n\}/)[0];
+  assert.ok(/filter\(r => r\.label !== destino\.label\)/.test(f), 'permitiria duplicados');
+  assert.ok(/slice\(0, MAX_RECIENTES\)/.test(f), 'la lista crece sin limite');
+});
+
+test('un JSON corrupto en el telefono no rompe la app', () => {
+  // localStorage lo puede tocar cualquiera y una version vieja pudo dejar
+  // basura; sin el try/catch la app no arranca mas y no hay forma de saber
+  // por que.
+  const f = js.match(/function leerJSON\([\s\S]*?\n\}/)[0];
+  assert.ok(/try/.test(f) && /catch/.test(f), 'leerJSON tiene que tolerar basura');
 });
 
 /* ------------------------------------------------------------------ */
