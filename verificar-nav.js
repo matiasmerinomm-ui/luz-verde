@@ -23,13 +23,34 @@ const N = new Function(
   ; return { distancia, rumbo, distanciaASegmento, ubicarEnRuta, acumulados,
              recorrido, iconoManiobra, pasoActual, umbralesAviso, distanciaHablada,
              fraseManiobra, camarasSobreRuta, buscarCamaras, evaluarDesvio,
-             zoomPorVelocidad, fmtDistanciaCorta, ICONO_MANIOBRA };`
+             zoomPorVelocidad, fmtDistanciaCorta, ICONO_MANIOBRA,
+             limitesSobreRuta, limiteVigente, excesoRelevante };`
 )();
 
 let ok = 0, mal = 0;
+const pendientes = [];
+
+/**
+ * Soporta tests asíncronos de verdad.
+ *
+ * Antes esta función hacía try/catch sobre fn() a secas: si fn devolvía una
+ * promesa, el catch nunca veía el error y el test imprimía "ok" pase lo que
+ * pase. Los tests asíncronos eran decoración. Ahora se juntan las promesas y
+ * se esperan antes del resumen.
+ */
 function test(nombre, fn) {
-  try { fn(); console.log('  ok    ' + nombre); ok++; }
-  catch (e) { console.log('  FALLO ' + nombre + '\n        ' + e.message); mal++; }
+  try {
+    const r = fn();
+    if (r && typeof r.then === 'function') {
+      pendientes.push(
+        r.then(() => { console.log('  ok    ' + nombre); ok++; })
+         .catch(e => { console.log('  FALLO ' + nombre + '\n        ' + e.message); mal++; }));
+    } else {
+      console.log('  ok    ' + nombre); ok++;
+    }
+  } catch (e) {
+    console.log('  FALLO ' + nombre + '\n        ' + e.message); mal++;
+  }
 }
 function casi(a, b, tol, msg) {
   assert.ok(Math.abs(a - b) <= tol, `${msg || ''} ${a} vs ${b} (tol ${tol})`);
@@ -286,24 +307,88 @@ test('sin camaras devuelve lista vacia, no explota', () => {
 test('si Overpass falla, el viaje sigue', async () => {
   const fetchRoto = () => Promise.reject(new Error('sin red'));
   const r = await N.buscarCamaras(RUTA, fetchRoto);
-  assert.deepStrictEqual(r, []);
+  assert.deepStrictEqual(r, { camaras: [], limites: [] });
 });
 
-test('parsea la respuesta de Overpass', async () => {
+test('separa camaras de limites en la respuesta de Overpass', async () => {
   const fetchFalso = () => Promise.resolve({
     ok: true,
     json: () => Promise.resolve({
       elements: [
-        { type: 'node', lat: -34.6037, lon: -58.3793, tags: { highway: 'speed_camera', maxspeed: '60' } },
-        { type: 'node', lat: -34.6010, lon: -58.3770, tags: { enforcement: 'maxspeed' } },
-        { type: 'way', id: 1 },                       // sin lat/lon: se descarta
+        { type: 'node', lat: -34.6037, lon: -58.3793,
+          tags: { highway: 'speed_camera', maxspeed: '60' } },
+        { type: 'node', lat: -34.6010, lon: -58.3770,
+          tags: { enforcement: 'maxspeed' } },
+        { type: 'way', id: 1, tags: { maxspeed: '80', highway: 'primary' },
+          geometry: [
+            { lat: -34.6037, lon: -58.3800 }, { lat: -34.6037, lon: -58.3790 },
+            { lat: -34.6037, lon: -58.3780 }, { lat: -34.6037, lon: -58.3775 },
+          ] },
+        { type: 'way', id: 2, tags: { highway: 'primary' } },   // sin maxspeed
       ],
     }),
   });
   const r = await N.buscarCamaras(RUTA, fetchFalso);
-  assert.strictEqual(r.length, 2);
-  assert.strictEqual(r[0].limite, 60);
-  assert.strictEqual(r[1].limite, null, 'sin tag de limite tiene que quedar en null');
+  assert.strictEqual(r.camaras.length, 2);
+  assert.strictEqual(r.camaras[0].limite, 60);
+  assert.strictEqual(r.camaras[1].limite, null);
+  assert.ok(r.limites.length >= 1, 'no extrajo los limites de las vias');
+  assert.ok(r.limites.every(l => l.limite === 80));
+});
+
+/* -------------------------------------------------------------------------- */
+console.log('\nLímites de velocidad');
+
+test('ubica cada limite en su metro del viaje', () => {
+  const tramos = [
+    { lat: -34.6037, lon: -58.3800, limite: 60 },
+    { lat: -34.5980, lon: -58.3740, limite: 40 },
+    { lat: -34.7000, lon: -58.3000, limite: 130 },   // lejos: se descarta
+  ];
+  const r = N.limitesSobreRuta(tramos, RUTA, ACC);
+  assert.strictEqual(r.length, 2, 'deberia quedarse con los dos de la ruta');
+  assert.ok(r[0].offset < r[1].offset, 'sin ordenar por avance no sirve');
+});
+
+test('colapsa limites repetidos consecutivos', () => {
+  const iguales = [
+    { lat: -34.6037, lon: -58.3810, limite: 60 },
+    { lat: -34.6037, lon: -58.3800, limite: 60 },
+    { lat: -34.6037, lon: -58.3790, limite: 60 },
+    { lat: -34.5990, lon: -58.3770, limite: 40 },
+  ];
+  const r = N.limitesSobreRuta(iguales, RUTA, ACC);
+  assert.strictEqual(r.length, 2, 'una avenida entera no puede ser 50 entradas');
+});
+
+test('el limite vigente es el ultimo que quedo atras', () => {
+  const l = [{ offset: 0, limite: 60 }, { offset: 500, limite: 40 },
+             { offset: 1200, limite: 80 }];
+  assert.strictEqual(N.limiteVigente(l, 0), 60);
+  assert.strictEqual(N.limiteVigente(l, 480), 60);
+  assert.strictEqual(N.limiteVigente(l, 700), 40);
+  assert.strictEqual(N.limiteVigente(l, 5000), 80);
+});
+
+test('sin datos de limite devuelve null, no un numero inventado', () => {
+  assert.strictEqual(N.limiteVigente([], 300), null);
+  // Antes del primer tramo conocido tampoco se puede afirmar nada.
+  assert.strictEqual(N.limiteVigente([{ offset: 900, limite: 60 }], 100), null);
+});
+
+test('la tolerancia evita avisar por diferencias de velocimetro', () => {
+  // El GPS y el velocimetro del auto nunca coinciden; sin margen, la app
+  // gritaria todo el viaje y terminarias silenciandola.
+  assert.strictEqual(N.excesoRelevante(62, 60), false, '2 km/h no es exceso');
+  assert.strictEqual(N.excesoRelevante(68, 60), false, 'dentro de tolerancia');
+  assert.strictEqual(N.excesoRelevante(75, 60), true);
+  assert.strictEqual(N.excesoRelevante(128, 120), false, 'en autopista el margen crece');
+  assert.strictEqual(N.excesoRelevante(140, 120), true);
+});
+
+test('sin limite conocido nunca marca exceso', () => {
+  assert.strictEqual(N.excesoRelevante(180, null), false);
+  assert.strictEqual(N.excesoRelevante(0, 60), false);
 });
 
 /* -------------------------------------------------------------------------- */
@@ -451,7 +536,7 @@ test('el paso vigente nunca retrocede', () => {
 });
 
 /* -------------------------------------------------------------------------- */
-setTimeout(() => {
+Promise.all(pendientes).then(() => {
   console.log(`\n${ok}/${ok + mal} verificaciones pasaron`);
   process.exit(mal ? 1 : 0);
-}, 100);
+});
