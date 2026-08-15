@@ -48,15 +48,15 @@
  "paquetes": [
   {
    "id": "voz1",
-   "nombre": "Voz 1"
+   "nombre": "Ciro"
   },
   {
    "id": "voz2",
-   "nombre": "Voz 2"
+   "nombre": "Nina"
   },
   {
    "id": "voz3",
-   "nombre": "Voz 3"
+   "nombre": "Ramiro"
   }
  ]
 }

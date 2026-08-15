@@ -207,7 +207,10 @@ body.navegando #btnMenu{display:none}
 .tagpeaje{display:inline-block;margin-top:7px;padding:4px 10px;border-radius:8px;
   background:#fdf3d8;border:1px solid #e6cf90;color:#7a5c10;font-size:12px;font-weight:600}
 .when.evitar button.on{background:var(--bad);border-color:var(--bad);color:#fff}
-#evitarAjustes{flex-wrap:wrap;overflow:visible;margin-top:2px}
+#evitarAjustes{flex-wrap:wrap;overflow:visible;margin-top:2px;gap:9px}
+#temaAjustes{margin-top:2px}
+#ajustes .btn{margin-top:20px}
+#ajustes .btn + .btn{margin-top:12px}
 
 /* ---------- hoja de ajustes ---------- */
 /* Menú lateral, como el de cualquier app de navegación: entra desde el borde
@@ -223,21 +226,22 @@ body.navegando #btnMenu{display:none}
 .menuCab img{width:44px;height:44px;border-radius:12px}
 .menuCab b{font-size:18px;letter-spacing:-.01em}
 .menuCab span{display:block;color:var(--dim);font-size:12px;font-weight:400}
-.hojaTit{font-size:12px;margin:22px 0 12px;font-weight:700;color:var(--dim);
+.hojaTit{font-size:12px;margin:30px 0 14px;font-weight:700;color:var(--dim);
   text-transform:uppercase;letter-spacing:.08em;
   border-top:1px solid var(--line);padding-top:16px}
 .hojaTit:first-of-type{border-top:0;padding-top:0;margin-top:0}
 .camp{display:block;color:var(--dim);font-size:12px;text-transform:uppercase;
-  letter-spacing:.07em;font-weight:600;margin-bottom:16px}
+  letter-spacing:.07em;font-weight:600;margin-bottom:22px}
 .camp .field,.camp input[type=range]{margin-top:7px;text-transform:none;
   letter-spacing:0;font-weight:400}
 .camp b{color:var(--txt);float:right;text-transform:none;letter-spacing:0}
 .camp input[type=range]{width:100%;accent-color:var(--verde)}
 select.field{appearance:none;background-image:none}
-.ayuda{color:var(--dim);font-size:12px;margin:-10px 0 16px;line-height:1.5}
+.ayuda{color:var(--dim);font-size:12px;margin:12px 0 24px;line-height:1.6}
 /* Los créditos no son decorativos: la licencia de OpenStreetMap obliga a
    atribuir. Se pueden mover fuera del mapa, pero no eliminar. */
-.creditos{color:#8aa697;font-size:10.5px;line-height:1.6;margin:22px 0 0;text-align:center}
+.creditos{color:#8aa697;font-size:10.5px;line-height:1.7;margin:30px 0 0;
+  text-align:center;border-top:1px solid var(--line);padding-top:18px}
 .creditos a{color:#8aa697;text-decoration:underline}
 
 /* ---------- modo navegación ---------- */
@@ -425,16 +429,17 @@ body.navegando #btnVoz{top:auto;bottom:150px}
 
     <h2 class="hojaTit">Preferencias de ruta</h2>
     <div class="when evitar" id="evitarAjustes"></div>
-    <p class="ayuda">Se aplican a todas las rutas que calcules. TomTom no ofrece
-      evitar cruces ferroviarios ni zonas peligrosas: eso en otras apps sale de
-      reportes de sus usuarios, no del motor de ruteo.</p>
+    <p class="ayuda">Por defecto no se evita nada: la ruta más rápida es la más
+      rápida. Encendé lo que quieras esquivar y se aplica a todos los cálculos.
+      <br><br>TomTom no permite evitar cruces ferroviarios ni zonas peligrosas:
+      eso en otras apps sale de reportes de sus usuarios, no del motor de ruteo.</p>
 
     <button class="btn" id="cerrarAjustes">Listo</button>
 
     <p class="creditos">
       Mapas © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
       y CARTO · Tránsito y rutas de TomTom · Cámaras y límites de OpenStreetMap.
-      <a href="#" id="resetKey">Cambiar la API Key</a>
+      <br><span id="resetKey">Luz Verde</span>
     </p>
   </div>
 </div>
@@ -844,7 +849,7 @@ const KEY_EMBEBIDA = '';
 /* Sello de esta versión. Sirve para saber de un vistazo si el teléfono está
    corriendo lo último que subiste o una copia vieja del caché — que es
    imposible de distinguir a ojo y hace perder mucho tiempo. */
-const VERSION_APP = 'lv-0815-337819';
+const VERSION_APP = 'lv-0815-beb040';
 console.log('Luz Verde ' + VERSION_APP);
 
 /**
@@ -867,13 +872,13 @@ const modoActual = () => MODOS.find(m => m.id === S.modo) || MODOS[0];
  * forma de pedirle que esquive cruces ferroviarios ni zonas inseguras.
  */
 const EVITABLES = [
-  ['tollRoads',        'Peajes'],
-  ['motorways',        'Autopistas'],
-  ['ferries',          'Balsas'],
-  ['unpavedRoads',     'Ripio'],
-  ['carpools',         'Carriles VAO'],
-  ['borderCrossings',  'Cruces de frontera'],
-  ['alreadyUsedRoads', 'Repetir camino'],
+  ['tollRoads',        'Evitar peajes'],
+  ['motorways',        'Evitar autopistas'],
+  ['ferries',          'Evitar balsas'],
+  ['unpavedRoads',     'Evitar ripio'],
+  ['carpools',         'Evitar carriles VAO'],
+  ['borderCrossings',  'Evitar cruzar la frontera'],
+  ['alreadyUsedRoads', 'No repetir camino'],
 ];
 
 /**
@@ -1823,9 +1828,12 @@ let velocidadVoz = parseFloat(localStorage.getItem('tt_vozVel')) || 1.05;
  */
 function cargarVoces() {
   const vs = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
-  const peso = v => (/es[-_]AR/i.test(v.lang) ? 0
-                   : /es[-_](UY|CL|419|MX)/i.test(v.lang) ? 1
-                   : /es[-_]US/i.test(v.lang) ? 2 : 3);
+  // La de Estados Unidos va primera a propósito: en la mayoría de los Android
+  // es la de mejor síntesis del motor de Google, y suena más natural que la
+  // rioplatense aunque el acento sea menos nuestro. Es la que queda por defecto.
+  const peso = v => (/es[-_]US/i.test(v.lang) ? 0
+                   : /es[-_]AR/i.test(v.lang) ? 1
+                   : /es[-_](UY|CL|419|MX)/i.test(v.lang) ? 2 : 3);
   // Android suele exponer la misma voz varias veces (una por motor instalado).
   // Sin deduplicar, el selector muestra "Español (Argentina)" tres veces y
   // parece roto.
@@ -1850,13 +1858,14 @@ if ('speechSynthesis' in window) {
   speechSynthesis.onvoiceschanged = cargarVoces;
 }
 
+/* Nombres propios en vez de "Voz 2 · Estados Unidos". Un nombre se recuerda y
+   se elige; un código de país no le dice nada a nadie. Se asignan por orden, y
+   como el orden es estable, cada voz conserva su nombre entre arranques. */
+const NOMBRES_VOZ = ['Nico', 'Ana', 'Tomi', 'Sofi', 'Bruno', 'Vale', 'Lucho', 'Mili'];
+
 function pintarSelectorVoz() {
   const sel = $('selVoz'), ayuda = $('ayudaVoz');
   if (!sel) return;
-
-  const PAIS = { AR: 'Argentina', UY: 'Uruguay', CL: 'Chile', MX: 'México',
-                 ES: 'España', US: 'Estados Unidos', CO: 'Colombia', PE: 'Perú',
-                 '419': 'Latinoamérica' };
 
   // Una sola lista con las dos familias. El valor lleva prefijo para saber
   // cuál es cuál: "p:voz1" es un paquete grabado, "s:Nombre" una voz de Android.
@@ -1867,12 +1876,10 @@ function pintarSelectorVoz() {
       `${pq.nombre}</option>`).join('') + '</optgroup>';
   }
   if (vocesEs.length) {
-    html += '<optgroup label="Voces de Android">' + vocesEs.map((v, i) => {
-      const cod = (v.lang.split(/[-_]/)[1] || '').toUpperCase();
-      return `<option value="s:${v.name}" ` +
-             `${!paqueteVoz && v === vozEs ? 'selected' : ''}>` +
-             `Voz ${i + 1} · ${PAIS[cod] || v.lang}</option>`;
-    }).join('') + '</optgroup>';
+    html += '<optgroup label="Voces del sistema">' + vocesEs.map((v, i) =>
+      `<option value="s:${v.name}" ` +
+      `${!paqueteVoz && v === vozEs ? 'selected' : ''}>` +
+      `${NOMBRES_VOZ[i] || 'Voz ' + (i + 1)}</option>`).join('') + '</optgroup>';
   }
 
   if (!html) {
@@ -1886,13 +1893,11 @@ function pintarSelectorVoz() {
   sel.innerHTML = html;
 
   ayuda.innerHTML = paquetes.length
-    ? `${paquetes.length} ${paquetes.length === 1 ? 'voz propia' : 'voces propias'} `
-      + 'de Luz Verde. Las de Android son las que tenga instaladas tu teléfono; '
-      + 'la app no puede fabricar otras.'
-    : 'Todavía no hay voces propias cargadas. Las de Android son las que tenga '
-      + 'instaladas tu teléfono. Para sumar más: <b>Ajustes de Android → '
-      + 'Administración general → Idioma → Texto a voz → motor de Google → '
-      + 'Instalar datos de voz</b>.';
+    ? 'Las voces de Luz Verde están grabadas y suenan igual en cualquier '
+      + 'teléfono. Las del sistema dependen de lo que tengas instalado.'
+    : 'Estas son las voces que tiene instaladas tu teléfono. Para sumar más: '
+      + '<b>Ajustes de Android → Administración general → Idioma → Texto a voz '
+      + '→ motor de Google → Instalar datos de voz</b>.';
 }
 
 
@@ -2530,13 +2535,18 @@ $('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('keySa
 
 /* Permite reemplazar la clave desde la propia app, sin recompilar ni tocar
    archivos. Sirve si algun dia hay que rotarla. */
-$('resetKey').onclick = e => {
-  e.preventDefault();
+/* Cambiar la clave existe, pero escondido: manteniendo pulsado el nombre en
+   los créditos. En el APK la clave va inyectada y esto no se usa nunca; dejarlo
+   a la vista es ensuciar la pantalla con algo que nadie necesita. Pero sin una
+   salida, una clave vencida te deja trabado sin forma de arreglarlo. */
+alMantenerPulsado($('resetKey'), () => {
+  if (!confirm('¿Cambiar la API Key de TomTom?')) return;
   localStorage.removeItem('tt_key');
   $('keyInput').value = '';
   $('keyErr').classList.add('hidden');
+  $('ajustes').classList.add('hidden');
   $('setup').classList.remove('hidden');
-};
+});
 
 
 /* ============================================================

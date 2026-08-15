@@ -558,14 +558,35 @@ test('la velocidad de la voz es configurable y se guarda', () => {
 test('sin ninguna voz lo dice en vez de fallar callado', () => {
   const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
   assert.ok(/No hay voces disponibles/.test(f),
-    'si no hay ni paquetes ni voces de Android, el usuario tiene que enterarse');
+    'si no hay ni paquetes ni voces del sistema, el usuario tiene que enterarse');
   assert.ok(/Texto a voz/.test(f), 'y saber dónde instalar voces del sistema');
+});
+
+test('las voces se muestran con nombre, no con codigo de pais', () => {
+  assert.ok(/const NOMBRES_VOZ = \[/.test(js), 'faltan los nombres propios');
+  const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/NOMBRES_VOZ\[i\]/.test(f), 'el selector no usa los nombres');
+  assert.ok(!/Estados Unidos|Argentina/.test(f),
+    'un codigo de pais no le dice nada a nadie; un nombre se recuerda');
+});
+
+test('los rotulos de ruta dicen que hacen', () => {
+  // "Peajes" no aclara si los busca o los esquiva. "Evitar peajes" si.
+  const f = js.match(/const EVITABLES = \[([\s\S]*?)\];/)[1];
+  const etiquetas = [...f.matchAll(/'([^']+)'\]/g)].map(m => m[1]);
+  assert.ok(etiquetas.every(e => /^(Evitar|No )/.test(e)),
+    'toda opcion tiene que decir la accion: ' + etiquetas.join(', '));
+});
+
+test('por defecto no se evita nada', () => {
+  assert.ok(/function leerEvitar\(\)[\s\S]*?\|\| \[\]/.test(js),
+    'la ruta mas rapida es la mas rapida: no hay que restringir de entrada');
 });
 
 test('las voces propias y las de Android conviven en una sola lista', () => {
   const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
   assert.ok(/optgroup label="Voces de Luz Verde"/.test(f), 'faltan los paquetes propios');
-  assert.ok(/optgroup label="Voces de Android"/.test(f), 'faltan las del sistema');
+  assert.ok(/optgroup label="Voces del sistema"/.test(f), 'faltan las del sistema');
   // El prefijo evita que un paquete llamado igual que una voz del sistema
   // se confundan al guardarse.
   assert.ok(/value="p:\$\{pq\.id\}"/.test(f) && /value="s:\$\{v\.name\}"/.test(f),
