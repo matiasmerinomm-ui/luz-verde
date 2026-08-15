@@ -1,0 +1,18 @@
+{
+  "appId": "ar.luzverde.app",
+  "appName": "Luz Verde",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#0e1116"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "backgroundColor": "#0e1116",
+      "launchAutoHide": true,
+      "launchShowDuration": 900
+    }
+  }
+}

@@ -1,0 +1,427 @@
+/**
+ * Verificacion de la logica de la app sin necesidad de red ni de un telefono.
+ *
+ *     node verificar.js
+ *
+ * Extrae las funciones puras de www/index.html y las corre contra una respuesta
+ * simulada de TomTom armada segun el esquema real de su Routing API. Chequea
+ * lo que se rompe en silencio: unidades mal convertidas, campos opcionales que
+ * no vienen, indices de tramos fuera de rango, fechas sin offset horario.
+ */
+
+const fs = require('fs');
+const assert = require('assert');
+
+const html = fs.readFileSync(__dirname + '/www/index.html', 'utf8');
+const js = html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/)[1];
+
+// Traer solo las funciones puras, sin tocar DOM ni Leaflet.
+function grab(name) {
+  const re = new RegExp(`(?:^|\\n)(function ${name}\\([\\s\\S]*?\\n\\})`, 'm');
+  const m = js.match(re);
+  if (!m) throw new Error('no se encontro la funcion ' + name);
+  return m[1];
+}
+const src = ['fmtDur', 'fmtDist', 'fmtClock', 'isoLocal', 'parseRoute']
+  .map(grab).join('\n');
+eval(src + '\nglobalThis._f = {fmtDur, fmtDist, fmtClock, isoLocal, parseRoute};');
+const F = globalThis._f;
+
+let pasaron = 0, fallaron = 0;
+function test(nombre, fn) {
+  try { fn(); console.log('  ok    ' + nombre); pasaron++; }
+  catch (e) { console.log('  FALLO ' + nombre + '\n        ' + e.message); fallaron++; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Respuesta simulada, con los campos tal como los documenta TomTom.   */
+/* ------------------------------------------------------------------ */
+const puntos = Array.from({ length: 40 }, (_, i) => ({
+  latitude: -34.60 + i * 0.0012,
+  longitude: -58.42 - i * 0.0009,
+}));
+
+const RESPUESTA = {
+  routes: [{
+    summary: {
+      lengthInMeters: 12450,
+      travelTimeInSeconds: 1580,
+      trafficDelayInSeconds: 420,
+      trafficLengthInMeters: 3100,
+      departureTime: '2026-08-15T18:30:00-03:00',
+      arrivalTime: '2026-08-15T18:56:20-03:00',
+      noTrafficTravelTimeInSeconds: 1160,
+      historicTrafficTravelTimeInSeconds: 1400,
+      liveTrafficIncidentsTravelTimeInSeconds: 1580,
+    },
+    legs: [{ points: puntos }],
+    sections: [
+      { startPointIndex: 5, endPointIndex: 12, sectionType: 'TRAFFIC',
+        simpleCategory: 'JAM', effectiveSpeedInKmh: 11, delayInSeconds: 300,
+        magnitudeOfDelay: 3 },
+      { startPointIndex: 20, endPointIndex: 24, sectionType: 'TRAFFIC',
+        simpleCategory: 'JAM', effectiveSpeedInKmh: 26, delayInSeconds: 120,
+        magnitudeOfDelay: 1 },
+      { startPointIndex: 0, endPointIndex: 39, sectionType: 'TRAVEL_MODE',
+        travelMode: 'car' },
+    ],
+    guidance: {
+      instructions: [
+        { message: 'Tomá Av. Rivadavia hacia el oeste', routeOffsetInMeters: 0,
+          maneuver: 'DEPART', street: 'Av. Rivadavia',
+          point: { latitude: -34.60, longitude: -58.42 } },
+        { message: 'Girá a la derecha en Medrano', routeOffsetInMeters: 1800,
+          maneuver: 'TURN_RIGHT', street: 'Medrano',
+          point: { latitude: -34.598, longitude: -58.415 } },
+        { routeOffsetInMeters: 2400, maneuver: 'STRAIGHT' },  // sin mensaje: se descarta
+        { message: 'Llegaste a destino', routeOffsetInMeters: 12450,
+          maneuver: 'ARRIVE', point: { latitude: -34.56, longitude: -58.39 } },
+      ],
+    },
+  }],
+};
+
+/* ------------------------------------------------------------------ */
+console.log('\nFormato de duracion y distancia');
+
+test('minutos por debajo de la hora', () => {
+  assert.deepStrictEqual(F.fmtDur(1580), { n: '26', u: 'min' });
+  assert.deepStrictEqual(F.fmtDur(59), { n: '1', u: 'min' });
+});
+
+test('pasa a horas y minutos', () => {
+  assert.deepStrictEqual(F.fmtDur(3600), { n: '1 h 00', u: 'min' });
+  assert.deepStrictEqual(F.fmtDur(5400), { n: '1 h 30', u: 'min' });
+  assert.deepStrictEqual(F.fmtDur(9000), { n: '2 h 30', u: 'min' });
+});
+
+test('distancias en metros y kilometros', () => {
+  assert.strictEqual(F.fmtDist(340), '340 m');
+  assert.strictEqual(F.fmtDist(999), '999 m');
+  assert.strictEqual(F.fmtDist(1000), '1.0 km');
+  assert.strictEqual(F.fmtDist(12450), '12.5 km');
+  assert.strictEqual(F.fmtDist(143000), '143 km');
+});
+
+test('reloj con minutos de dos digitos', () => {
+  assert.strictEqual(F.fmtClock(new Date(2026, 7, 15, 18, 5)), '18:05');
+  assert.strictEqual(F.fmtClock(new Date(2026, 7, 15, 9, 30)), '9:30');
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\nFecha para salida programada');
+
+test('lleva offset horario, que TomTom exige', () => {
+  const s = F.isoLocal(new Date(2026, 7, 15, 18, 30, 0));
+  assert.match(s, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/,
+    'formato inesperado: ' + s);
+});
+
+test('cero a la izquierda en mes y dia', () => {
+  const s = F.isoLocal(new Date(2026, 0, 5, 7, 3, 9));
+  assert.ok(s.startsWith('2026-01-05T07:03:09'), s);
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\nParseo de la respuesta de TomTom');
+
+const r = F.parseRoute(RESPUESTA.routes[0]);
+
+test('tiempos y distancia', () => {
+  assert.strictEqual(r.seconds, 1580);
+  assert.strictEqual(r.meters, 12450);
+  assert.strictEqual(r.delay, 420);
+  assert.strictEqual(r.jamMeters, 3100);
+});
+
+test('tiempo tipico y sin transito para comparar', () => {
+  assert.strictEqual(r.typical, 1400);
+  assert.strictEqual(r.free, 1160);
+  // 1580 vs 1400 tipico -> hoy esta 3 min peor que lo normal
+  assert.strictEqual(Math.round((r.seconds - r.typical) / 60), 3);
+});
+
+test('geometria completa y en [lat, lon]', () => {
+  assert.strictEqual(r.points.length, 40);
+  assert.strictEqual(r.points[0][0], -34.60);
+  assert.strictEqual(r.points[0][1], -58.42);
+  r.points.forEach(([la, lo]) => {
+    assert.ok(la >= -90 && la <= 90, 'latitud fuera de rango: ' + la);
+    assert.ok(lo >= -180 && lo <= 180, 'longitud fuera de rango: ' + lo);
+  });
+});
+
+test('solo se quedan los tramos de transito', () => {
+  assert.strictEqual(r.sections.length, 2);
+  assert.ok(r.sections.every(s => s.sectionType === 'TRAFFIC'));
+});
+
+test('los indices de tramo caen dentro de la geometria', () => {
+  r.sections.forEach(s => {
+    assert.ok(s.startPointIndex >= 0);
+    assert.ok(s.endPointIndex < r.points.length,
+      `endPointIndex ${s.endPointIndex} >= ${r.points.length} puntos`);
+    const seg = r.points.slice(s.startPointIndex, s.endPointIndex + 1);
+    assert.ok(seg.length >= 2, 'tramo degenerado, no se puede dibujar');
+  });
+});
+
+test('instrucciones sin mensaje se descartan', () => {
+  assert.strictEqual(r.steps.length, 3);
+  assert.ok(r.steps.every(s => typeof s.mensaje === 'string' && s.mensaje.length));
+});
+
+test('los pasos traen lo que necesita la guia por voz', () => {
+  // Sin maniobra no hay icono; sin offset no se puede saber a que distancia
+  // anunciar. Con solo el texto, la navegacion no se puede construir.
+  for (const s of r.steps) {
+    assert.ok(typeof s.offset === 'number', 'falta offset en: ' + s.mensaje);
+    assert.ok(typeof s.maniobra === 'string' && s.maniobra, 'falta maniobra');
+  }
+  assert.strictEqual(r.steps[0].maniobra, 'DEPART');
+  assert.strictEqual(r.steps[1].offset, 1800);
+  assert.deepStrictEqual(r.steps[1].punto, [-34.598, -58.415]);
+  assert.strictEqual(r.steps[1].calle, 'Medrano');
+});
+
+test('si TomTom no manda maniobra, no queda sin icono', () => {
+  const sinManiobra = {
+    summary: { lengthInMeters: 500, travelTimeInSeconds: 60 },
+    legs: [{ points: puntos.slice(0, 5) }],
+    guidance: { instructions: [{ message: 'Seguí derecho', routeOffsetInMeters: 0 }] },
+  };
+  assert.strictEqual(F.parseRoute(sinManiobra).steps[0].maniobra, 'STRAIGHT');
+});
+
+test('los offsets de los pasos vienen ordenados', () => {
+  for (let i = 1; i < r.steps.length; i++) {
+    assert.ok(r.steps[i].offset >= r.steps[i - 1].offset,
+      'pasos desordenados: la guia anunciaria maniobras salteadas');
+  }
+});
+
+test('hora de llegada parseada', () => {
+  assert.ok(r.arrival instanceof Date);
+  assert.ok(!isNaN(r.arrival.getTime()));
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\nRespuestas incompletas (el caso que rompe en produccion)');
+
+test('sin campos opcionales no explota', () => {
+  const minima = {
+    summary: { lengthInMeters: 5000, travelTimeInSeconds: 600 },
+    legs: [{ points: puntos.slice(0, 10) }],
+  };
+  const x = F.parseRoute(minima);
+  assert.strictEqual(x.delay, 0);
+  assert.strictEqual(x.jamMeters, 0);
+  assert.strictEqual(x.typical, null);
+  assert.strictEqual(x.free, null);
+  assert.strictEqual(x.arrival, null);
+  assert.deepStrictEqual(x.sections, []);
+  assert.deepStrictEqual(x.steps, []);
+  assert.strictEqual(x.points.length, 10);
+});
+
+test('varios tramos de recorrido se concatenan', () => {
+  const dosLegs = {
+    summary: { lengthInMeters: 9000, travelTimeInSeconds: 900 },
+    legs: [{ points: puntos.slice(0, 10) }, { points: puntos.slice(10, 25) }],
+  };
+  assert.strictEqual(F.parseRoute(dosLegs).points.length, 25);
+});
+
+test('sin demora informada se muestra calle libre', () => {
+  const libre = {
+    summary: { lengthInMeters: 5000, travelTimeInSeconds: 600,
+               trafficDelayInSeconds: 0, noTrafficTravelTimeInSeconds: 600 },
+    legs: [{ points: puntos.slice(0, 8) }],
+  };
+  const x = F.parseRoute(libre);
+  assert.strictEqual(Math.round(x.delay / 60), 0);
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\nCoherencia de la app');
+
+test('NO hay ninguna API key en el codigo', () => {
+  // El repositorio es publico. Una clave commiteada la lee cualquiera y le
+  // quema al dueño las 2.500 consultas del dia. Este test es la unica cosa
+  // que impide que se cuele por descuido.
+  const decl = js.match(/const KEY_EMBEBIDA = '([^']*)'/);
+  assert.ok(decl, 'falta la constante KEY_EMBEBIDA');
+  assert.strictEqual(decl[1], '',
+    'HAY UNA CLAVE COMMITEADA. Vaciá KEY_EMBEBIDA y cargala como secreto ' +
+    'TOMTOM_KEY del repositorio, o pasá el repositorio a privado.');
+
+  // Y que no se haya colado ninguna otra por otro lado.
+  const sueltas = (js.match(/['"][A-Za-z0-9]{28,}['"]/g) || [])
+    .filter(s => !/^['"](https?|data:)/.test(s));
+  assert.deepStrictEqual(sueltas, [],
+    'cadenas sospechosas de ser una clave: ' + sueltas.join(', '));
+});
+
+test('la clave se puede inyectar al compilar', () => {
+  // El workflow reemplaza esta linea con sed. Si cambia el formato de la
+  // declaracion, la inyeccion falla en silencio y el APK sale sin clave.
+  const wf = require('fs').readFileSync(
+    __dirname + '/.github/workflows/build-apk.yml', 'utf8');
+  const patron = /const KEY_EMBEBIDA = '\[\^'\]\*'/;
+  assert.ok(patron.test(wf), 'el workflow no reconoce el formato de la constante');
+
+  // Simulacro del reemplazo, para confirmar que efectivamente engancha.
+  const reemplazado = js.replace(
+    /const KEY_EMBEBIDA = '[^']*'/, "const KEY_EMBEBIDA = 'CLAVE_INYECTADA'");
+  assert.ok(reemplazado.includes("KEY_EMBEBIDA = 'CLAVE_INYECTADA'"),
+    'el reemplazo del workflow no engancharia');
+});
+
+test('lo guardado en el telefono tiene prioridad sobre lo embebido', () => {
+  assert.ok(/localStorage\.getItem\('tt_key'\)\s*\|\|\s*KEY_EMBEBIDA/.test(js),
+    'si la embebida pisa a la guardada, cambiar la clave desde la app no sirve');
+});
+
+test('se puede cambiar la clave sin recompilar', () => {
+  assert.ok(js.includes("localStorage.removeItem('tt_key')"),
+    'no hay forma de resetear la clave desde la app');
+});
+
+test('los tres endpoints se usan y van por https', () => {
+  assert.ok(/const TT = 'https:\/\/api\.tomtom\.com'/.test(js), 'la base no es https');
+  assert.ok(!/http:\/\/api\.tomtom\.com/.test(js), 'hay una llamada sin cifrar');
+  for (const ep of ['/search/2/search/', '/search/2/reverseGeocode/',
+                    '/routing/1/calculateRoute/']) {
+    assert.ok(js.includes('${TT}' + ep), 'falta el endpoint ' + ep);
+  }
+});
+
+test('se pide el transito en vivo y el tipico', () => {
+  assert.ok(/traffic:\s*'true'/.test(js), 'falta traffic=true');
+  assert.ok(/computeTravelTimeFor:\s*'all'/.test(js), 'falta computeTravelTimeFor=all');
+  assert.ok(/sectionType:\s*'traffic'/.test(js), 'falta sectionType=traffic');
+});
+
+test('hay refresco automatico del ETA', () => {
+  assert.ok(/setInterval/.test(js), 'el ETA quedaria congelado');
+});
+
+test('el mapa se reencuadra en el orden correcto', () => {
+  // Regresion de un bug real: se dibujaba la ruta antes de llenar el panel.
+  // Al llenarse, el panel crecia y le comia alto al mapa, pero Leaflet seguia
+  // con el tamano viejo cacheado: el encuadre quedaba calculado para un
+  // contenedor inexistente y el origen del viaje se salia de la pantalla.
+  const fn = js.match(/function refresh\(\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(fn, 'falta la funcion refresh()');
+  const cuerpo = fn[1];
+  assert.ok(cuerpo.indexOf('render()') < cuerpo.indexOf('draw()'),
+    'refresh() tiene que llamar render() antes que draw()');
+
+  const dibujo = js.match(/function draw\(\)\s*\{([\s\S]*?)\n\}/)[1];
+  assert.ok(dibujo.includes('invalidateSize'), 'draw() no revalida el tamano');
+  assert.ok(dibujo.indexOf('invalidateSize') < dibujo.indexOf('fitBounds'),
+    'invalidateSize tiene que ir antes de fitBounds');
+});
+
+test('no quedan llamadas sueltas a draw/render fuera de refresh', () => {
+  const sueltas = (js.match(/draw\(\);\s*render\(\)|render\(\);\s*draw\(\)/g) || [])
+    .filter(x => !x.includes('\n'));
+  // render();draw() dentro de refresh() es el unico permitido
+  assert.ok(sueltas.length <= 1,
+    'hay llamadas encadenadas fuera de refresh(): ' + sueltas.join(' | '));
+});
+
+test('cada magnitud de demora tiene color', () => {
+  const jam = js.match(/const JAM = \[([\s\S]*?)\];/)[1];
+  const n = (jam.match(/\{\s*c:/g) || []).length;
+  assert.strictEqual(n, 5, 'TomTom usa magnitudeOfDelay 0..4, hay ' + n + ' colores');
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\nNavegación conectada');
+
+test('la app es un unico archivo autocontenido', () => {
+  // Regresion real: el motor de navegacion vivia en nav.js. Abriendo el HTML
+  // desde WhatsApp (content://) o con doble clic (file://), esa ruta relativa
+  // no resuelve y la navegacion desaparecia sin ningun error visible.
+  const srcs = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]);
+  const relativos = srcs.filter(s => !/^https?:\/\//.test(s));
+  assert.deepStrictEqual(relativos, [],
+    'hay scripts con ruta relativa: no cargan desde file:// ni content:// -> ' + relativos);
+});
+
+test('el motor de navegacion esta embebido y antes del script principal', () => {
+  const i = html.indexOf('=== MOTOR DE NAVEGACION');
+  assert.ok(i > 0, 'falta el bloque del motor');
+  assert.ok(i < html.lastIndexOf('<script>'), 'el motor tiene que definirse antes');
+});
+
+test('las etiquetas de script abren y cierran parejo', () => {
+  const abren = (html.match(/<script[ >]/g) || []).length;
+  const cierran = (html.match(/<\/script>/g) || []).length;
+  assert.strictEqual(abren, cierran,
+    `${abren} aperturas contra ${cierran} cierres: hay una etiqueta suelta, ` +
+    'probablemente dentro de un comentario');
+});
+
+test('todos los ids que usa el script existen en el HTML', () => {
+  const definidos = new Set([...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
+  const usados = new Set([...js.matchAll(/\$\('([^']+)'\)/g)].map(m => m[1]));
+  const faltan = [...usados].filter(id => !definidos.has(id));
+  assert.deepStrictEqual(faltan, [], 'ids inexistentes: ' + faltan.join(', '));
+});
+
+test('el boton Iniciar dispara el viaje', () => {
+  assert.ok(html.includes('id="btnIniciar"') || js.includes('btnIniciar'),
+    'falta el boton de iniciar');
+  assert.ok(/\$\('btnIniciar'\)\.onclick\s*=\s*\(\)\s*=>\s*iniciarViaje\(\)/.test(js),
+    'el boton no llama a iniciarViaje');
+});
+
+test('navegando, el mapa no se reencuadra solo', () => {
+  const dibujo = js.match(/function draw\(\)\s*\{([\s\S]*?)\n\}/)[1];
+  assert.ok(dibujo.includes('if (NAV.on) return'),
+    'draw() le arrebataria la camara al conductor en cada posicion');
+});
+
+test('navegando, no corre el refresco de planificacion', () => {
+  const f = js.match(/function scheduleRefresh\(\)\s*\{([\s\S]*?)\n\}/)[1];
+  assert.ok(f.includes('NAV.on'),
+    'un recalculo de fondo le cambiaria la ruta abajo de los pies');
+});
+
+test('salir del viaje libera GPS, voz y pantalla', () => {
+  const f = js.match(/function terminarViaje\([\s\S]*?\n\}/)[0];
+  assert.ok(/clearWatch/.test(f), 'queda el GPS prendido comiendo bateria');
+  assert.ok(/speechSynthesis\.cancel/.test(f), 'queda hablando');
+  assert.ok(/mantenerPantalla\(false\)/.test(f), 'queda la pantalla encendida');
+});
+
+test('la pantalla se mantiene encendida durante el viaje', () => {
+  assert.ok(js.includes("wakeLock.request('screen')"), 'falta el Wake Lock');
+  // Android suelta el bloqueo al pasar a segundo plano: hay que recuperarlo.
+  assert.ok(/if \(NAV\.on\) \{ mantenerPantalla\(true\)/.test(js),
+    'no se recupera el bloqueo al volver a la app');
+});
+
+test('el GPS continuo usa el plugin de Capacitor si esta', () => {
+  const f = js.match(/function seguirPosicion\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/Capacitor/.test(f) && /watchPosition/.test(f),
+    'dentro del APK el seguimiento fallaria sin el plugin');
+});
+
+test('el desvio se evalua contra el reloj, no de golpe', () => {
+  assert.ok(/evaluarDesvio\(NAV\.desvio, u\.metros, Date\.now\(\)\)/.test(js),
+    'sin sostener el desvio en el tiempo, cada rebote del GPS recalcula');
+});
+
+test('las camaras se piden una vez por ruta, no por posicion', () => {
+  const enBucle = js.match(/function pintarNav\([\s\S]*?\n\}/)[0];
+  assert.ok(!enBucle.includes('buscarCamaras'),
+    'consultar Overpass en cada posicion es abuso del servicio y va a fallar');
+  assert.ok(js.match(/function cargarRutaEnNav\([\s\S]*?\n\}/)[0].includes('buscarCamaras'));
+});
+
+/* ------------------------------------------------------------------ */
+console.log(`\n${pasaron}/${pasaron + fallaron} verificaciones pasaron`);
+process.exit(fallaron ? 1 : 0);

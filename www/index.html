@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0e1116">
+<title>Luz Verde</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --bg:#0e1116; --card:#171b22; --card2:#1e242e; --line:#2a313d;
+  --txt:#e9edf3; --dim:#98a2b3; --accent:#4da3ff;
+  --ok:#3fb950; --warn:#e3a008; --bad:#f4603e; --crit:#e5484d;
+  --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overscroll-behavior:none}
+body{
+  background:var(--bg);color:var(--txt);
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  display:flex;flex-direction:column;
+}
+button,input{font-family:inherit;font-size:16px}
+
+/* ---------- pantalla de configuración ---------- */
+#setup{position:fixed;inset:0;background:var(--bg);z-index:2000;
+  padding:calc(var(--safe-top) + 34px) 22px 22px;overflow-y:auto}
+#setup h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}
+#setup p{color:var(--dim);font-size:14px;margin:0 0 18px}
+#setup ol{color:var(--dim);font-size:14px;padding-left:20px;margin:0 0 20px}
+#setup ol li{margin-bottom:7px}
+#setup a{color:var(--accent)}
+.field{width:100%;padding:14px;border-radius:12px;border:1px solid var(--line);
+  background:var(--card);color:var(--txt);outline:none}
+.field:focus{border-color:var(--accent)}
+.btn{width:100%;padding:15px;border:0;border-radius:12px;background:var(--accent);
+  color:#04121f;font-weight:700;font-size:16px;margin-top:12px}
+.btn:disabled{opacity:.45}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--dim);font-weight:600}
+
+/* ---------- barra de búsqueda ---------- */
+#top{padding:calc(var(--safe-top) + 10px) 12px 10px;background:var(--bg);
+  z-index:900;border-bottom:1px solid var(--line)}
+.inputrow{display:flex;align-items:center;gap:9px;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;padding:0 12px;margin-bottom:8px}
+.inputrow:focus-within{border-color:var(--accent)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.inputrow input{flex:1;border:0;background:transparent;color:var(--txt);
+  padding:13px 0;outline:none;min-width:0}
+.inputrow input::placeholder{color:#5c6675}
+.iconbtn{border:0;background:transparent;color:var(--dim);padding:8px;font-size:17px;flex:none}
+#sug{position:absolute;left:12px;right:12px;background:var(--card2);
+  border:1px solid var(--line);border-radius:12px;overflow:hidden;z-index:1200;
+  box-shadow:0 12px 32px rgba(0,0,0,.5);max-height:52vh;overflow-y:auto}
+#sug div{padding:13px 14px;border-bottom:1px solid var(--line)}
+#sug div:last-child{border:0}
+#sug b{display:block;font-weight:600;font-size:14.5px}
+#sug span{color:var(--dim);font-size:12.5px}
+.hidden{display:none!important}
+
+/* ---------- mapa ---------- */
+#map{flex:1;background:#11151b;min-height:190px}
+.leaflet-control-attribution{background:rgba(14,17,22,.82)!important;color:#6b7484!important;
+  font-size:9.5px!important}
+.leaflet-control-attribution a{color:#8b95a6!important}
+.leaflet-bar a{background:var(--card)!important;color:var(--txt)!important;
+  border-color:var(--line)!important}
+
+/* ---------- panel de resultados ---------- */
+#panel{background:var(--card);border-top:1px solid var(--line);
+  border-radius:18px 18px 0 0;padding:14px 16px calc(var(--safe-bot) + 14px);
+  max-height:56vh;overflow-y:auto;z-index:800}
+.grab{width:38px;height:4px;border-radius:3px;background:#39414f;margin:0 auto 12px}
+.eta{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.eta .big{font-size:40px;font-weight:750;letter-spacing:-.035em;line-height:1}
+.eta .unit{font-size:17px;color:var(--dim);font-weight:600}
+.eta .arr{margin-left:auto;text-align:right;font-size:13px;color:var(--dim)}
+.eta .arr b{display:block;font-size:19px;color:var(--txt);font-weight:650}
+.sub{color:var(--dim);font-size:13.5px;margin-top:5px}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;
+  font-size:13.5px;font-weight:600;margin-top:12px;width:100%}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;
+  font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+
+.alt{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:12px;
+  border:1px solid var(--line);margin-top:9px}
+.alt.on{border-color:var(--accent);background:#131d2a}
+.alt .stripe{width:4px;height:32px;border-radius:3px;flex:none}
+.alt .txt{flex:1;min-width:0}
+.alt .t1{font-weight:650;font-size:15px}
+.alt .t2{color:var(--dim);font-size:12.5px;margin-top:1px}
+
+.when{display:flex;gap:7px;margin-top:13px;overflow-x:auto;padding-bottom:2px;
+  scrollbar-width:none}
+.when::-webkit-scrollbar{display:none}
+.when button{white-space:nowrap;padding:8px 14px;border-radius:99px;
+  border:1px solid var(--line);background:transparent;color:var(--dim);
+  font-size:13px;font-weight:600}
+.when button.on{background:var(--accent);border-color:var(--accent);color:#04121f}
+
+.steps{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.steps summary{color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;list-style:none}
+.steps summary::-webkit-details-marker{display:none}
+.steps ol{margin:11px 0 0;padding-left:19px;color:var(--dim);font-size:13.5px}
+.steps li{margin-bottom:8px}
+.steps li b{color:var(--txt);font-weight:600}
+
+#msg{padding:11px 14px;margin:10px 12px;border-radius:11px;font-size:13.5px;
+  background:#2b1d1d;border:1px solid #5a2f2c;color:#ffb4a8}
+#hint{padding:26px 22px;text-align:center;color:var(--dim);font-size:14px}
+.spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line);
+  border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;
+  vertical-align:-3px;margin-right:7px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.foot{color:#5c6675;font-size:11px;text-align:center;margin-top:14px;line-height:1.5}
+.btn.iniciar{background:var(--ok);color:#05230d;margin-top:14px;font-size:17px}
+.whenlbl{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+  font-weight:600;margin-top:16px}
+
+/* ---------- modo navegación ---------- */
+body.navegando #top,
+body.navegando #panel,
+body.navegando #msg{display:none}
+body.navegando #map{flex:1}
+
+#nav{position:fixed;inset:0;z-index:1500;pointer-events:none;
+     display:flex;flex-direction:column;justify-content:space-between}
+#nav > *{pointer-events:auto}
+
+#navTop{background:#12305a;margin:calc(var(--safe-top) + 8px) 8px 0;border-radius:16px;
+  padding:15px 17px;display:flex;align-items:center;gap:15px;
+  box-shadow:0 10px 30px rgba(0,0,0,.55)}
+#navIcono{font-size:40px;line-height:1;color:#cfe4ff;flex:none;width:46px;text-align:center}
+#navDist{font-size:26px;font-weight:750;letter-spacing:-.02em;line-height:1.1}
+#navMsg{font-size:14.5px;color:#bcd2f0;margin-top:3px}
+#navLuego{font-size:12.5px;color:#7f9cc4;margin-top:6px;
+  border-top:1px solid rgba(255,255,255,.10);padding-top:6px}
+
+#navMedio{margin:0 8px;display:flex;flex-direction:column;gap:7px;align-items:flex-start}
+.chip{padding:9px 14px;border-radius:12px;font-size:13.5px;font-weight:650;
+  box-shadow:0 6px 20px rgba(0,0,0,.5);display:flex;align-items:center;gap:8px}
+.chip.camara{background:#3a1d1d;border:1px solid #7d3a35;color:#ffc7ba}
+.chip.recalc{background:#2a2410;border:1px solid #6d5a1e;color:#f0d489}
+.chip .lim{background:#fff;color:#b3261e;border-radius:50%;width:26px;height:26px;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;
+  border:2px solid #b3261e}
+
+#navBottom{background:var(--card);border-top:1px solid var(--line);
+  border-radius:18px 18px 0 0;padding:13px 16px calc(var(--safe-bot) + 13px);
+  display:flex;align-items:center;gap:14px}
+#navBottom .blq{text-align:center;min-width:62px}
+#navBottom .blq b{display:block;font-size:21px;font-weight:700;line-height:1.15;
+  font-variant-numeric:tabular-nums}
+#navBottom .blq small{color:var(--dim);font-size:11px}
+#navBottom .crece{flex:1}
+#navSalir{border:0;border-radius:12px;background:#3a2220;color:#ffb4a8;
+  padding:12px 18px;font-weight:700;font-size:15px}
+
+.flecha .f{width:0;height:0;border-left:12px solid transparent;
+  border-right:12px solid transparent;border-bottom:26px solid var(--accent);
+  filter:drop-shadow(0 2px 5px rgba(0,0,0,.75));transform-origin:50% 65%}
+</style>
+</head>
+<body>
+
+<!-- ============ CONFIGURACIÓN ============ -->
+<div id="setup">
+  <h1>Luz Verde</h1>
+  <p>Tiempo de llegada con el tránsito real de este momento.</p>
+  <ol>
+    <li>Entrá a <a href="https://developer.tomtom.com/user/register" target="_blank" rel="noopener">developer.tomtom.com</a> y creá una cuenta (no pide tarjeta).</li>
+    <li>En el panel te aparece una <b>API Key</b> ya creada. Copiala.</li>
+    <li>Pegala acá abajo. Queda guardada solo en este teléfono.</li>
+  </ol>
+  <input id="keyInput" class="field" placeholder="Pegá tu API Key de TomTom"
+         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  <button id="keySave" class="btn">Empezar</button>
+  <div id="keyErr" class="sub hidden" style="color:#ffb4a8;text-align:center"></div>
+  <p class="foot">2.500 consultas por día sin costo.<br>Cada cálculo de ruta usa una.</p>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="top">
+  <div class="inputrow">
+    <i class="dot" style="background:var(--ok)"></i>
+    <input id="fromInput" placeholder="Mi ubicación" autocomplete="off">
+    <button class="iconbtn" id="gpsBtn" title="Usar mi ubicación">◎</button>
+  </div>
+  <div class="inputrow">
+    <i class="dot" style="background:var(--accent)"></i>
+    <input id="toInput" placeholder="¿A dónde vas?" autocomplete="off">
+    <button class="iconbtn hidden" id="clearBtn">✕</button>
+  </div>
+  <div id="sug" class="hidden"></div>
+</div>
+
+<div id="msg" class="hidden"></div>
+<div id="map"></div>
+
+<div id="panel">
+  <div class="grab"></div>
+  <div id="hint">
+    Escribí una dirección para calcular el tiempo de viaje con el tránsito de ahora.
+    <div class="foot"><a href="#" id="resetKey">Cambiar la API Key</a></div>
+  </div>
+  <div id="result" class="hidden"></div>
+</div>
+
+<!-- ============ NAVEGACIÓN ============ -->
+<div id="nav" class="hidden">
+  <div id="navTop">
+    <span id="navIcono">▲</span>
+    <div style="flex:1;min-width:0">
+      <div id="navDist">—</div>
+      <div id="navMsg">Buscando señal de GPS…</div>
+      <div id="navLuego" class="hidden"></div>
+    </div>
+  </div>
+
+  <div id="navMedio"></div>
+
+  <div id="navBottom">
+    <div class="blq"><b id="navVel">0</b><small>km/h</small></div>
+    <div class="blq crece"><b id="navRest">—</b><small id="navEta">calculando</small></div>
+    <button id="navSalir">Salir</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* === MOTOR DE NAVEGACION ===================================================
+   Va embebido y no en un archivo aparte a proposito: asi index.html sigue
+   siendo UN solo archivo que funciona abierto de cualquier lado -- doble
+   clic, mandado por WhatsApp, o servido desde un hosting. Una etiqueta de
+   script con ruta relativa no resuelve cuando el HTML se abre desde
+   content:// o file:// y la navegacion desaparecia sin avisar.
+   Los tests lo extraen de aca; ver verificar-nav.js.
+   ======================================================================== */
+/* ---------------------------------------------------------------- geometría */
+
+const R_TIERRA = 6371000;
+
+function rad(g) { return g * Math.PI / 180; }
+
+/** Distancia en metros entre dos puntos [lat, lon]. */
+function distancia(a, b) {
+  const dLat = rad(b[0] - a[0]);
+  const dLon = rad(b[1] - a[1]);
+  const s = Math.sin(dLat / 2) ** 2 +
+            Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(dLon / 2) ** 2;
+  return 2 * R_TIERRA * Math.asin(Math.sqrt(s));
+}
+
+/** Rumbo en grados [0,360) de a hacia b. 0 = norte. */
+function rumbo(a, b) {
+  const p1 = rad(a[0]), p2 = rad(b[0]), dl = rad(b[1] - a[1]);
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+/**
+ * Distancia de un punto al segmento a-b, y el punto proyectado.
+ *
+ * Se trabaja en un plano local: a las latitudes de acá el error de aplanar
+ * unos pocos cientos de metros es de centímetros, y evita la trigonometría
+ * esférica en un cálculo que corre varias veces por segundo.
+ */
+function distanciaASegmento(p, a, b) {
+  const escalaLon = Math.cos(rad(p[0]));
+  const px = (p[1] - a[1]) * escalaLon, py = p[0] - a[0];
+  const bx = (b[1] - a[1]) * escalaLon, by = b[0] - a[0];
+  const largo2 = bx * bx + by * by;
+
+  let t = largo2 === 0 ? 0 : (px * bx + py * by) / largo2;
+  t = Math.max(0, Math.min(1, t));
+
+  const proy = [a[0] + t * by, a[1] + t * bx / (escalaLon || 1)];
+  return { metros: distancia(p, proy), t, punto: proy };
+}
+
+/**
+ * Ubica la posición del vehículo sobre la polilínea de la ruta.
+ *
+ * `desde` acota la búsqueda a partir del último tramo conocido. Sin eso, en una
+ * ruta que se cruza a sí misma —una rotonda, una vuelta manzana— el vehículo
+ * "salta" al tramo equivocado y la distancia restante da cualquier cosa.
+ */
+function ubicarEnRuta(pos, puntos, desde = 0, ventana = 60) {
+  let mejor = { idx: desde, metros: Infinity, t: 0, punto: puntos[desde] };
+  const hasta = Math.min(puntos.length - 1, desde + ventana);
+
+  for (let i = desde; i < hasta; i++) {
+    const r = distanciaASegmento(pos, puntos[i], puntos[i + 1]);
+    if (r.metros < mejor.metros) mejor = { idx: i, metros: r.metros, t: r.t, punto: r.punto };
+  }
+  return mejor;
+}
+
+/** Longitudes acumuladas de la polilínea, en metros. */
+function acumulados(puntos) {
+  const acc = [0];
+  for (let i = 1; i < puntos.length; i++) {
+    acc.push(acc[i - 1] + distancia(puntos[i - 1], puntos[i]));
+  }
+  return acc;
+}
+
+/** Metros recorridos hasta la posición ubicada sobre la ruta. */
+function recorrido(ubic, acc, puntos) {
+  const base = acc[ubic.idx];
+  const tramo = distancia(puntos[ubic.idx], puntos[ubic.idx + 1] || puntos[ubic.idx]);
+  return base + tramo * ubic.t;
+}
+
+/* ------------------------------------------------------------- instrucciones */
+
+/** Ícono por tipo de maniobra de TomTom. */
+const ICONO_MANIOBRA = {
+  DEPART: '▲', STRAIGHT: '▲', ARRIVE: '◉',
+  ARRIVE_LEFT: '◉', ARRIVE_RIGHT: '◉',
+  TURN_LEFT: '↰', TURN_RIGHT: '↱',
+  SHARP_LEFT: '⬉', SHARP_RIGHT: '⬈',
+  BEAR_LEFT: '↖', BEAR_RIGHT: '↗',
+  KEEP_LEFT: '↖', KEEP_RIGHT: '↗',
+  MAKE_UTURN: '⤺',
+  TAKE_EXIT: '↱', MOTORWAY_EXIT_LEFT: '↰', MOTORWAY_EXIT_RIGHT: '↱',
+  TAKE_FERRY: '⛴',
+  ROUNDABOUT_LEFT: '↺', ROUNDABOUT_RIGHT: '↻',
+  ROUNDABOUT_BACK: '⤺', ROUNDABOUT_CROSS: '▲',
+  TRY_MAKE_UTURN: '⤺', FOLLOW: '▲', SWITCH_PARALLEL_ROAD: '▲',
+};
+
+function iconoManiobra(m) { return ICONO_MANIOBRA[m] || '▲'; }
+
+/**
+ * Cuál es la instrucción vigente según los metros recorridos.
+ * Devuelve el índice de la próxima maniobra a anunciar.
+ */
+function pasoActual(pasos, metrosRecorridos) {
+  for (let i = 0; i < pasos.length; i++) {
+    if (pasos[i].offset > metrosRecorridos + 5) return i;
+  }
+  return pasos.length - 1;
+}
+
+/* ------------------------------------------------------------------ locución */
+
+/**
+ * Umbrales de aviso, en metros. Se eligen según la velocidad: a 100 km/h un
+ * aviso a 100 m llega tarde (son 3,6 segundos); en ciudad a 30 km/h un aviso
+ * a 800 m es ruido y el conductor lo ignora.
+ */
+function umbralesAviso(velocidadKmh) {
+  if (velocidadKmh >= 80) return [1500, 700, 200];
+  if (velocidadKmh >= 45) return [800, 300, 100];
+  return [300, 120, 40];
+}
+
+/** Distancia hablada, redondeada como la diría una persona. */
+function distanciaHablada(m) {
+  if (m < 30) return null;                       // "ahora"
+  if (m < 100) return `${Math.round(m / 10) * 10} metros`;
+  if (m < 1000) return `${Math.round(m / 50) * 50} metros`;
+  const km = m / 1000;
+  return km < 10 ? `${km.toFixed(1).replace('.', ',')} kilómetros`
+                 : `${Math.round(km)} kilómetros`;
+}
+
+/** Arma la frase a decir para una maniobra a cierta distancia. */
+function fraseManiobra(paso, metros) {
+  const d = distanciaHablada(metros);
+  const texto = (paso.mensaje || '').trim();
+  if (!d) return texto || 'Ahora';
+  return `En ${d}, ${texto.charAt(0).toLowerCase()}${texto.slice(1)}`;
+}
+
+/* ------------------------------------------------------------------ cámaras */
+
+/**
+ * Se queda con las cámaras que están efectivamente sobre el trayecto.
+ *
+ * Sin este filtro, una cámara en la avenida paralela dispara una alarma falsa
+ * cada vez. Además calcula en qué metro del recorrido cae cada una, para poder
+ * avisar solo cuando el vehículo se está acercando y no cuando ya pasó.
+ */
+function camarasSobreRuta(camaras, puntos, acc, margenM = 90) {
+  const salida = [];
+  for (const c of camaras) {
+    let mejor = { metros: Infinity, idx: 0, t: 0 };
+    for (let i = 0; i < puntos.length - 1; i++) {
+      const r = distanciaASegmento([c.lat, c.lon], puntos[i], puntos[i + 1]);
+      if (r.metros < mejor.metros) mejor = { metros: r.metros, idx: i, t: r.t };
+    }
+    if (mejor.metros <= margenM) {
+      const tramo = distancia(puntos[mejor.idx], puntos[mejor.idx + 1]);
+      salida.push({ ...c, offset: acc[mejor.idx] + tramo * mejor.t, aviso: false });
+    }
+  }
+  return salida.sort((a, b) => a.offset - b.offset);
+}
+
+/** Consulta Overpass. Devuelve [] ante cualquier problema: nunca rompe el viaje. */
+async function buscarCamaras(puntos, fetchImpl) {
+  const f = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
+  if (!f) return [];
+
+  const lats = puntos.map(p => p[0]), lons = puntos.map(p => p[1]);
+  const bbox = [
+    Math.min(...lats) - 0.01, Math.min(...lons) - 0.01,
+    Math.max(...lats) + 0.01, Math.max(...lons) + 0.01,
+  ].join(',');
+
+  const q = `[out:json][timeout:20];
+(
+  node["highway"="speed_camera"](${bbox});
+  node["enforcement"="maxspeed"](${bbox});
+);
+out body;`;
+
+  try {
+    const r = await f('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: 'data=' + encodeURIComponent(q),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+    if (!r.ok) return [];
+    const d = await r.json();
+    return (d.elements || [])
+      .filter(e => e.lat && e.lon)
+      .map(e => ({
+        lat: e.lat,
+        lon: e.lon,
+        limite: parseInt((e.tags && (e.tags.maxspeed || e.tags['maxspeed:forward'])) || '', 10) || null,
+      }));
+  } catch (_) {
+    return [];
+  }
+}
+
+/* -------------------------------------------------------------------- desvío */
+
+/**
+ * Decide si el vehículo se salió de la ruta.
+ *
+ * Hace falta sostener el desvío en el tiempo: el GPS urbano rebota entre
+ * edificios y un umbral instantáneo recalcularía la ruta cada dos cuadras,
+ * quemando cuota y mareando al conductor.
+ */
+function evaluarDesvio(estado, metrosDeRuta, ahora, umbralM = 55, sostenerMs = 8000) {
+  if (metrosDeRuta <= umbralM) {
+    estado.desdeMs = null;
+    return false;
+  }
+  if (estado.desdeMs === null || estado.desdeMs === undefined) {
+    estado.desdeMs = ahora;
+    return false;
+  }
+  return ahora - estado.desdeMs >= sostenerMs;
+}
+
+/* ----------------------------------------------------------------- utilidades */
+
+/** Zoom del mapa según la velocidad: más rápido, más lejos hay que ver. */
+function zoomPorVelocidad(kmh) {
+  if (kmh >= 90) return 15;
+  if (kmh >= 60) return 16;
+  if (kmh >= 25) return 17;
+  return 18;
+}
+
+function fmtDistanciaCorta(m) {
+  if (m < 1000) return Math.round(m / 10) * 10 + ' m';
+  return (m / 1000).toFixed(1) + ' km';
+}
+</script>
+<script>
+'use strict';
+
+/* ============================================================
+   API Key de TomTom
+   ------------------------------------------------------------
+   VACIA A PROPOSITO. Este repositorio es publico: una clave
+   escrita aca la puede leer cualquiera y quemarte las 2.500
+   consultas diarias.
+
+   De donde sale la clave, entonces:
+
+   1. Compilando el APK -> del secreto TOMTOM_KEY del repositorio.
+      El workflow la inyecta en este mismo lugar al compilar, asi
+      queda dentro del APK pero nunca en el codigo publicado.
+
+   2. Abriendo la app en el navegador -> te la pide una vez y la
+      guarda en ese telefono (localStorage). No viaja a ningun lado.
+
+   Si algun dia pasas el repositorio a privado, podes pegarla aca
+   directamente y te ahorras el paso 1.
+   ============================================================ */
+const KEY_EMBEBIDA = '';
+
+/* ============================================================
+   Estado
+   ============================================================ */
+const S = {
+  // Lo guardado en el telefono manda sobre lo embebido: permite
+  // cambiar la clave desde la app sin recompilar.
+  key: localStorage.getItem('tt_key') || KEY_EMBEBIDA || '',
+  from: null,          // {lat, lon, label}
+  to: null,
+  routes: [],
+  picked: 0,
+  departIn: 0,         // minutos desde ahora; 0 = salir ya
+  layers: [],
+  markers: [],
+  timer: null,
+  busy: false,
+};
+
+const $ = id => document.getElementById(id);
+const TT = 'https://api.tomtom.com';
+
+/* ============================================================
+   Mapa
+   ============================================================ */
+const map = L.map('map', { zoomControl: false, attributionControl: true })
+  .setView([-34.6037, -58.3816], 12);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19, subdomains: 'abcd',
+  attribution: '&copy; OpenStreetMap &copy; CARTO &middot; Tránsito por TomTom'
+}).addTo(map);
+
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+/* ============================================================
+   Utilidades
+   ============================================================ */
+function fmtDur(sec) {
+  const m = Math.round(sec / 60);
+  if (m < 60) return { n: String(m), u: 'min' };
+  return { n: Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'), u: 'min' };
+}
+function fmtDist(m) {
+  if (m < 1000) return Math.round(m) + ' m';
+  // El decimal se mantiene hasta los 100 km: en un viaje urbano la diferencia
+  // entre 12 y 12.5 km importa. Se redondea a decenas de metro antes de
+  // formatear porque toFixed arrastra el error binario -- 12.45 se guarda como
+  // 12.4499... y saldria "12.4 km".
+  const km = Math.round(m / 100) / 10;
+  return (m < 100000 ? km.toFixed(1) : Math.round(km)) + ' km';
+}
+function fmtClock(d) {
+  return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function showMsg(text) {
+  const el = $('msg');
+  el.textContent = text;
+  el.classList.remove('hidden');
+  clearTimeout(showMsg._t);
+  showMsg._t = setTimeout(() => el.classList.add('hidden'), 6000);
+}
+function debounce(fn, ms) {
+  let t;
+  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+/** Fecha ISO con offset local — TomTom la exige así para predicción. */
+function isoLocal(date) {
+  const off = -date.getTimezoneOffset();
+  const sign = off >= 0 ? '+' : '-';
+  const p = n => String(Math.floor(Math.abs(n))).padStart(2, '0');
+  return date.getFullYear() + '-' + p(date.getMonth() + 1) + '-' + p(date.getDate())
+    + 'T' + p(date.getHours()) + ':' + p(date.getMinutes()) + ':' + p(date.getSeconds())
+    + sign + p(off / 60) + ':' + p(off % 60);
+}
+
+async function tomtom(url) {
+  const r = await fetch(url);
+  if (r.status === 403) throw new Error('La API Key no es válida o no tiene permisos.');
+  if (r.status === 429) throw new Error('Se agotaron las consultas gratuitas de hoy.');
+  if (!r.ok) throw new Error('TomTom respondió ' + r.status + '.');
+  return r.json();
+}
+
+/* ============================================================
+   Búsqueda de direcciones
+   ============================================================ */
+async function search(query, near) {
+  const p = new URLSearchParams({
+    key: S.key, limit: '6', countrySet: 'AR', language: 'es-ES', typeahead: 'true'
+  });
+  if (near) { p.set('lat', near.lat); p.set('lon', near.lon); p.set('radius', '150000'); }
+  const d = await tomtom(`${TT}/search/2/search/${encodeURIComponent(query)}.json?${p}`);
+  return (d.results || []).map(r => ({
+    lat: r.position.lat,
+    lon: r.position.lon,
+    label: (r.poi && r.poi.name) || r.address.freeformAddress,
+    detail: r.address.freeformAddress,
+  }));
+}
+
+async function reverse(lat, lon) {
+  const d = await tomtom(`${TT}/search/2/reverseGeocode/${lat},${lon}.json?key=${S.key}&language=es-ES`);
+  const a = d.addresses && d.addresses[0];
+  return a ? a.address.freeformAddress : 'Mi ubicación';
+}
+
+/* ============================================================
+   Ruteo con tráfico en vivo
+   ============================================================ */
+async function route() {
+  if (!S.from || !S.to || S.busy) return;
+  S.busy = true;
+  renderLoading();
+
+  const p = new URLSearchParams({
+    key: S.key,
+    traffic: 'true',                  // <- tránsito en vivo
+    travelMode: 'car',
+    routeType: 'fastest',
+    computeTravelTimeFor: 'all',      // <- devuelve además el tiempo típico y sin tránsito
+    maxAlternatives: '2',
+    sectionType: 'traffic',           // <- tramos con demora, para pintar la ruta
+    instructionsType: 'text',
+    language: 'es-ES',
+  });
+  if (S.departIn > 0) {
+    p.set('departAt', isoLocal(new Date(Date.now() + S.departIn * 60000)));
+  }
+
+  const loc = `${S.from.lat},${S.from.lon}:${S.to.lat},${S.to.lon}`;
+
+  try {
+    const d = await tomtom(`${TT}/routing/1/calculateRoute/${loc}/json?${p}`);
+    S.routes = (d.routes || []).map(parseRoute);
+    if (!S.routes.length) throw new Error('No se encontró una ruta para ese trayecto.');
+    S.picked = 0;
+    refresh();
+    scheduleRefresh();
+  } catch (e) {
+    showMsg(e.message);
+    $('hint').classList.remove('hidden');
+    $('result').classList.add('hidden');
+  } finally {
+    S.busy = false;
+  }
+}
+
+function parseRoute(r) {
+  const s = r.summary;
+  const pts = [];
+  (r.legs || []).forEach(leg => (leg.points || []).forEach(pt => pts.push([pt.latitude, pt.longitude])));
+
+  // Tiempo típico para este día y hora. Si viene, permite decir si hoy está
+  // peor o mejor que lo normal — que es más útil que el número solo.
+  const typical = s.historicTrafficTravelTimeInSeconds || null;
+  const free = s.noTrafficTravelTimeInSeconds || null;
+
+  return {
+    points: pts,
+    seconds: s.travelTimeInSeconds,
+    meters: s.lengthInMeters,
+    delay: s.trafficDelayInSeconds || 0,
+    jamMeters: s.trafficLengthInMeters || 0,
+    typical, free,
+    arrival: s.arrivalTime ? new Date(s.arrivalTime) : null,
+    sections: (r.sections || []).filter(x => x.sectionType === 'TRAFFIC'),
+    // Los pasos alimentan tanto la lista escrita como la guía por voz, así que
+    // se conservan la maniobra y el punto, no solo el texto.
+    steps: ((r.guidance && r.guidance.instructions) || [])
+      .filter(i => i.message)
+      .map(i => ({
+        mensaje: i.message,
+        offset: i.routeOffsetInMeters || 0,
+        maniobra: i.maneuver || i.instructionType || 'STRAIGHT',
+        calle: i.street || '',
+        punto: i.point ? [i.point.latitude, i.point.longitude] : null,
+      })),
+  };
+}
+
+/* Color por magnitud de demora que devuelve TomTom (0 = leve … 4 = corte). */
+const JAM = [
+  { c: '#7cc4ff', t: 'leve' },
+  { c: '#e3a008', t: 'moderada' },
+  { c: '#f4603e', t: 'fuerte' },
+  { c: '#e5484d', t: 'muy fuerte' },
+  { c: '#a1191d', t: 'cortado' },
+];
+
+function draw() {
+  S.layers.forEach(l => map.removeLayer(l));
+  S.markers.forEach(m => map.removeLayer(m));
+  S.layers = []; S.markers = [];
+
+  // Alternativas primero, apagadas, para que la elegida quede arriba.
+  S.routes.forEach((r, i) => {
+    if (i === S.picked) return;
+    S.layers.push(L.polyline(r.points, {
+      color: '#6b7484', weight: 4, opacity: .5
+    }).addTo(map).on('click', () => { S.picked = i; refresh(); }));
+  });
+
+  const r = S.routes[S.picked];
+  S.layers.push(L.polyline(r.points, {
+    color: '#4da3ff', weight: 7, opacity: .95, lineJoin: 'round'
+  }).addTo(map));
+
+  // Encima, los tramos congestionados con su color real.
+  r.sections.forEach(sec => {
+    const seg = r.points.slice(sec.startPointIndex, sec.endPointIndex + 1);
+    if (seg.length < 2) return;
+    const j = JAM[Math.min(4, Math.max(0, sec.magnitudeOfDelay || 0))];
+    S.layers.push(L.polyline(seg, { color: j.c, weight: 7, opacity: .98 }).addTo(map));
+  });
+
+  const pin = (ll, color) => L.circleMarker(ll, {
+    radius: 8, color: '#0e1116', weight: 3, fillColor: color, fillOpacity: 1
+  }).addTo(map);
+  S.markers.push(pin(r.points[0], '#3fb950'));
+  S.markers.push(pin(r.points[r.points.length - 1], '#4da3ff'));
+
+  // Navegando manda la cámara que sigue al vehículo: reencuadrar acá le
+  // arrebataría el mapa al conductor en cada actualización de posición.
+  if (NAV.on) return;
+
+  // invalidateSize antes de encuadrar, siempre. Leaflet cachea el tamano del
+  // contenedor; si el panel de resultados crecio y le comio alto al mapa, el
+  // encuadre se calcula para un contenedor que ya no existe y la ruta se sale
+  // de la pantalla.
+  map.invalidateSize({ animate: false });
+  map.fitBounds(L.latLngBounds(r.points), { padding: [26, 26], animate: false });
+}
+
+/* Orden obligatorio: primero el panel (que define cuanto alto le queda al
+   mapa), despues el dibujo (que encuadra). Al reves, la ruta queda cortada. */
+function refresh() {
+  render();
+  draw();
+}
+
+/* ============================================================
+   Panel
+   ============================================================ */
+function renderLoading() {
+  $('hint').classList.add('hidden');
+  const el = $('result');
+  el.classList.remove('hidden');
+  el.innerHTML = '<div class="sub" style="padding:16px 0"><i class="spin"></i>Consultando el tránsito…</div>';
+}
+
+function render() {
+  const r = S.routes[S.picked];
+  const d = fmtDur(r.seconds);
+  const arrival = r.arrival || new Date(Date.now() + (S.departIn * 60 + r.seconds) * 1000);
+  const delayMin = Math.round(r.delay / 60);
+
+  // Comparación contra lo típico de este día y hora.
+  let vs = '';
+  if (r.typical) {
+    const diff = Math.round((r.seconds - r.typical) / 60);
+    if (diff >= 3) vs = `<span class="tag" style="background:#3a2320;color:#ffab91">${diff} min peor que lo normal</span>`;
+    else if (diff <= -3) vs = `<span class="tag" style="background:#16301c;color:#7ee787">${-diff} min mejor que lo normal</span>`;
+    else vs = `<span class="tag" style="background:#232a35;color:var(--dim)">como siempre a esta hora</span>`;
+  }
+
+  let badge;
+  if (delayMin >= 1) {
+    const pct = r.free ? Math.round((r.delay / r.free) * 100) : 0;
+    const sev = delayMin >= 15 ? 'bad' : delayMin >= 6 ? 'warn' : 'ok';
+    badge = `<div class="badge" style="background:#241c14;color:#f0b429">
+      <b>+${delayMin} min</b> de demora por tránsito${pct ? ` · ${pct}% más lento que con la calle libre` : ''}
+    </div>`;
+    if (sev === 'ok') badge = badge.replace('#241c14', '#16220f').replace('#f0b429', '#8fce6b');
+    if (sev === 'bad') badge = badge.replace('#241c14', '#2b1714').replace('#f0b429', '#ff9478');
+  } else {
+    badge = `<div class="badge" style="background:#16220f;color:#8fce6b">Calle libre, sin demoras</div>`;
+  }
+
+  const jam = r.jamMeters > 300
+    ? `<div class="sub">${fmtDist(r.jamMeters)} del trayecto con tránsito lento.</div>` : '';
+
+  const alts = S.routes.length > 1 ? S.routes.map((x, i) => {
+    const dd = fmtDur(x.seconds);
+    const extra = i === 0 ? '' : ` · ${Math.round((x.seconds - S.routes[0].seconds) / 60) >= 0 ? '+' : ''}${Math.round((x.seconds - S.routes[0].seconds) / 60)} min`;
+    return `<div class="alt ${i === S.picked ? 'on' : ''}" data-i="${i}">
+      <i class="stripe" style="background:${i === S.picked ? 'var(--accent)' : '#6b7484'}"></i>
+      <div class="txt">
+        <div class="t1">${dd.n} ${dd.u}${i === 0 ? ' · más rápida' : ''}</div>
+        <div class="t2">${fmtDist(x.meters)}${extra}${x.delay > 60 ? ` · +${Math.round(x.delay / 60)} min de demora` : ''}</div>
+      </div>
+    </div>`;
+  }).join('') : '';
+
+  const steps = r.steps.length ? `<details class="steps">
+      <summary>Ver indicaciones (${r.steps.length})</summary>
+      <ol>${r.steps.slice(0, 60).map(s => `<li>${s.mensaje}</li>`).join('')}</ol>
+    </details>` : '';
+
+  const whens = [[0, 'Ahora'], [15, '+15 min'], [30, '+30 min'], [60, '+1 h'], [120, '+2 h']];
+
+  $('result').innerHTML = `
+    <div class="eta">
+      <span class="big">${d.n}</span><span class="unit">${d.u}</span>
+      <span class="arr">llegás<b>${fmtClock(arrival)}</b></span>
+    </div>
+    <div class="sub">${fmtDist(r.meters)} · ${S.to.label}</div>
+    ${vs ? `<div style="margin-top:9px">${vs}</div>` : ''}
+    ${badge}
+    ${jam}
+    <button class="btn iniciar" id="btnIniciar">Iniciar viaje</button>
+    <div class="whenlbl">Salida</div>
+    <div class="when">${whens.map(([v, t]) =>
+      `<button data-w="${v}" class="${S.departIn === v ? 'on' : ''}">${t}</button>`).join('')}</div>
+    ${alts}
+    ${steps}
+    <div class="foot">Tránsito en vivo de TomTom · se actualiza solo cada minuto</div>`;
+
+
+  $('result').classList.remove('hidden');
+  $('hint').classList.add('hidden');
+
+  $('result').querySelectorAll('.alt').forEach(el =>
+    el.onclick = () => { S.picked = +el.dataset.i; refresh(); });
+  $('result').querySelectorAll('.when button').forEach(el =>
+    el.onclick = () => { S.departIn = +el.dataset.w; route(); });
+  $('btnIniciar').onclick = () => iniciarViaje();
+}
+
+/* Refresco automático: el tránsito cambia, el ETA de hace 10 minutos miente. */
+function scheduleRefresh() {
+  clearInterval(S.timer);
+  S.timer = setInterval(() => {
+    // Navegando no corre: el motor de navegación maneja su propia ruta y un
+    // recálculo de fondo le cambiaría la geometría abajo de los pies.
+    if (NAV.on) return;
+    if (S.departIn === 0 && S.from && S.to && !document.hidden) route();
+  }, 60000);
+}
+
+/* ============================================================
+   Autocompletado
+   ============================================================ */
+const doSuggest = debounce(async (q, which) => {
+  if (q.length < 3) return $('sug').classList.add('hidden');
+  try {
+    const res = await search(q, S.from || { lat: map.getCenter().lat, lon: map.getCenter().lng });
+    if (!res.length) return $('sug').classList.add('hidden');
+    $('sug').innerHTML = res.map((r, i) =>
+      `<div data-i="${i}"><b>${r.label}</b><span>${r.detail}</span></div>`).join('');
+    $('sug').classList.remove('hidden');
+    $('sug').querySelectorAll('div[data-i]').forEach(el => el.onclick = () => {
+      const pick = res[+el.dataset.i];
+      if (which === 'to') { S.to = pick; $('toInput').value = pick.label; }
+      else { S.from = pick; $('fromInput').value = pick.label; }
+      $('sug').classList.add('hidden');
+      document.activeElement.blur();
+      if (S.from && S.to) route();
+    });
+  } catch (e) { showMsg(e.message); }
+}, 320);
+
+$('toInput').addEventListener('input', e => {
+  doSuggest(e.target.value.trim(), 'to');
+  $('clearBtn').classList.toggle('hidden', !e.target.value);
+});
+$('fromInput').addEventListener('input', e => doSuggest(e.target.value.trim(), 'from'));
+
+$('clearBtn').onclick = () => {
+  $('toInput').value = ''; S.to = null; S.routes = [];
+  $('clearBtn').classList.add('hidden');
+  $('sug').classList.add('hidden');
+  $('result').classList.add('hidden');
+  $('hint').classList.remove('hidden');
+  S.layers.forEach(l => map.removeLayer(l)); S.markers.forEach(m => map.removeLayer(m));
+  S.layers = []; S.markers = [];
+  clearInterval(S.timer);
+};
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#sug') && !e.target.closest('.inputrow')) $('sug').classList.add('hidden');
+});
+
+/* ============================================================
+   GPS
+   ============================================================ */
+/* Dentro del APK hay que usar el plugin de Capacitor: es el que dispara el
+   pedido de permiso de Android en tiempo de ejecución. navigator.geolocation
+   a secas funciona en el navegador pero dentro del WebView falla sin ruido.
+   Se prueba el plugin primero y se cae al navegador si no está. */
+function getPosition(opts) {
+  const cap = window.Capacitor;
+  const plugin = cap && cap.Plugins && cap.Plugins.Geolocation;
+  if (plugin) {
+    return plugin.requestPermissions()
+      .catch(() => null)                       // en web el método no existe
+      .then(() => plugin.getCurrentPosition(opts));
+  }
+  if (!navigator.geolocation) return Promise.reject({ code: 2 });
+  return new Promise((res, rej) =>
+    navigator.geolocation.getCurrentPosition(res, rej, opts));
+}
+
+async function locate(silent) {
+  $('fromInput').value = 'Ubicando…';
+  try {
+    const pos = await getPosition({ enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+    const { latitude: lat, longitude: lon } = pos.coords;
+    S.from = { lat, lon, label: 'Mi ubicación' };
+    map.setView([lat, lon], 14);
+    try { S.from.label = await reverse(lat, lon); } catch (_) {}
+    $('fromInput').value = S.from.label;
+    if (S.to) route();
+  } catch (err) {
+    $('fromInput').value = '';
+    if (silent) return;
+    const denied = err && (err.code === 1 || /denied|permission/i.test(err.message || ''));
+    showMsg(denied
+      ? 'Permiso de ubicación denegado. Escribí la dirección de origen a mano.'
+      : 'No se pudo obtener la ubicación. Escribí el origen a mano.');
+  }
+}
+
+$('gpsBtn').onclick = () => locate(false);
+
+/* ============================================================
+   Navegación
+   ============================================================ */
+const NAV = {
+  on: false, watchId: null,
+  puntos: [], acc: [], total: 0, pasos: [], idxTramo: 0,
+  camaras: [], avisados: {}, desvio: {},
+  marker: null, wake: null, velKmh: 0, ultimaVoz: 0,
+};
+
+/* -- voz ------------------------------------------------------------------ */
+
+let vozEs = null;
+function elegirVoz() {
+  const vs = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+  vozEs = vs.find(v => /es[-_]AR/i.test(v.lang))
+       || vs.find(v => /es[-_](419|MX|US|CL|UY)/i.test(v.lang))
+       || vs.find(v => /^es/i.test(v.lang)) || null;
+}
+if ('speechSynthesis' in window) {
+  elegirVoz();
+  speechSynthesis.onvoiceschanged = elegirVoz;
+}
+
+function hablar(texto) {
+  if (!('speechSynthesis' in window) || !texto) return;
+  // No encimar avisos. Dos voces superpuestas no se entienden y el conductor
+  // termina ignorando las dos.
+  if (speechSynthesis.speaking && Date.now() - NAV.ultimaVoz < 3000) return;
+  const u = new SpeechSynthesisUtterance(texto);
+  u.lang = 'es-AR';
+  if (vozEs) u.voice = vozEs;
+  u.rate = 1.05;
+  speechSynthesis.speak(u);
+  NAV.ultimaVoz = Date.now();
+}
+
+/* -- pantalla encendida --------------------------------------------------- */
+
+async function mantenerPantalla(encendida) {
+  try {
+    if (encendida && 'wakeLock' in navigator) {
+      NAV.wake = await navigator.wakeLock.request('screen');
+    } else if (NAV.wake) {
+      await NAV.wake.release();
+      NAV.wake = null;
+    }
+  } catch (_) { /* sin soporte: el viaje sigue igual */ }
+}
+
+/* -- ciclo de vida -------------------------------------------------------- */
+
+function cargarRutaEnNav(r) {
+  NAV.puntos = r.points;
+  NAV.acc = acumulados(r.points);
+  NAV.total = NAV.acc[NAV.acc.length - 1];
+  NAV.pasos = r.steps;
+  NAV.idxTramo = 0;
+  NAV.avisados = {};
+  NAV.desvio = {};
+
+  // Las cámaras se piden una vez por ruta y en segundo plano: si Overpass
+  // tarda o falla, el viaje arranca igual.
+  NAV.camaras = [];
+  buscarCamaras(r.points).then(cs => {
+    NAV.camaras = camarasSobreRuta(cs, NAV.puntos, NAV.acc);
+  });
+}
+
+function iniciarViaje() {
+  const r = S.routes[S.picked];
+  if (!r) return;
+
+  NAV.on = true;
+  cargarRutaEnNav(r);
+
+  document.body.classList.add('navegando');
+  $('nav').classList.remove('hidden');
+  clearInterval(S.timer);
+  setTimeout(() => { map.invalidateSize(); draw(); }, 60);
+
+  mantenerPantalla(true);
+  // El primer hablar() tiene que salir del gesto del usuario: Android bloquea
+  // la sintesis de voz si no hubo interaccion previa.
+  hablar('Iniciando viaje. ' + (NAV.pasos[0] ? NAV.pasos[0].mensaje : ''));
+  seguirPosicion();
+}
+
+function terminarViaje(mensaje) {
+  NAV.on = false;
+
+  const cap = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
+  if (NAV.watchId != null) {
+    try {
+      if (cap && typeof NAV.watchId === 'string') cap.clearWatch({ id: NAV.watchId });
+      else navigator.geolocation.clearWatch(NAV.watchId);
+    } catch (_) {}
+    NAV.watchId = null;
+  }
+
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  mantenerPantalla(false);
+
+  if (NAV.marker) { map.removeLayer(NAV.marker); NAV.marker = null; }
+  document.body.classList.remove('navegando');
+  $('nav').classList.add('hidden');
+  $('navMedio').innerHTML = '';
+
+  setTimeout(() => { map.invalidateSize(); refresh(); }, 60);
+  scheduleRefresh();
+  if (mensaje) showMsg(mensaje);
+}
+
+function seguirPosicion() {
+  const cap = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
+  const opts = { enableHighAccuracy: true, timeout: 15000, maximumAge: 1000 };
+
+  if (cap) {
+    cap.watchPosition(opts, (pos) => { if (pos) onPosicion(pos); })
+       .then(id => { NAV.watchId = id; })
+       .catch(() => showMsg('No se pudo acceder al GPS.'));
+  } else if (navigator.geolocation) {
+    NAV.watchId = navigator.geolocation.watchPosition(
+      onPosicion,
+      e => { if (e.code === 1) showMsg('Sin permiso de ubicación.'); },
+      opts);
+  } else {
+    showMsg('Este dispositivo no expone el GPS.');
+  }
+}
+
+/* -- cada posición nueva -------------------------------------------------- */
+
+function onPosicion(pos) {
+  if (!NAV.on) return;
+  const p = [pos.coords.latitude, pos.coords.longitude];
+  NAV.velKmh = Math.max(0, (pos.coords.speed || 0) * 3.6);
+  const rumboGps = (pos.coords.heading != null && !isNaN(pos.coords.heading))
+    ? pos.coords.heading : null;
+
+  // Búsqueda acotada al tramo actual, para no saltar a un tramo que se cruza.
+  let u = ubicarEnRuta(p, NAV.puntos, NAV.idxTramo);
+  if (u.metros > 120) {
+    // Muy lejos: puede ser que el acotado esté mal. Se busca en toda la ruta
+    // antes de declarar desvío, por las dudas.
+    const global = ubicarEnRuta(p, NAV.puntos, 0, NAV.puntos.length);
+    if (global.metros < u.metros) u = global;
+  }
+  NAV.idxTramo = u.idx;
+
+  const hecho = recorrido(u, NAV.acc, NAV.puntos);
+  const resta = Math.max(0, NAV.total - hecho);
+
+  if (resta < 40) {
+    hablar('Llegaste a destino');
+    terminarViaje('Llegaste a destino.');
+    return;
+  }
+
+  if (evaluarDesvio(NAV.desvio, u.metros, Date.now())) {
+    NAV.desvio = {};
+    recalcular(p);
+    return;
+  }
+
+  pintarNav(p, rumboGps, u, hecho, resta);
+}
+
+function pintarNav(p, rumboGps, u, hecho, resta) {
+  // Flecha del vehículo, orientada al rumbo del GPS o, si no lo informa, a la
+  // dirección del tramo que está recorriendo.
+  const rot = rumboGps != null
+    ? rumboGps
+    : rumbo(NAV.puntos[u.idx], NAV.puntos[Math.min(u.idx + 1, NAV.puntos.length - 1)]);
+
+  if (!NAV.marker) {
+    NAV.marker = L.marker(p, {
+      icon: L.divIcon({ className: 'flecha', html: '<div class="f"></div>',
+                        iconSize: [24, 26], iconAnchor: [12, 17] }),
+      zIndexOffset: 1000,
+    }).addTo(map);
+  }
+  NAV.marker.setLatLng(p);
+  const el = NAV.marker.getElement();
+  if (el) { const f = el.querySelector('.f'); if (f) f.style.transform = `rotate(${rot}deg)`; }
+
+  map.setView(p, zoomPorVelocidad(NAV.velKmh), { animate: true, duration: 0.6 });
+
+  const i = pasoActual(NAV.pasos, hecho);
+  const paso = NAV.pasos[i];
+  const dManiobra = paso ? Math.max(0, paso.offset - hecho) : resta;
+
+  $('navIcono').textContent = iconoManiobra(paso && paso.maniobra);
+  $('navDist').textContent = dManiobra < 25 ? 'Ahora' : fmtDistanciaCorta(dManiobra);
+  $('navMsg').textContent = paso ? paso.mensaje : 'Seguí derecho';
+
+  const sig = NAV.pasos[i + 1];
+  $('navLuego').classList.toggle('hidden', !sig);
+  if (sig) $('navLuego').textContent = 'Después: ' + sig.mensaje;
+
+  $('navVel').textContent = Math.round(NAV.velKmh);
+  $('navRest').textContent = fmtDistanciaCorta(resta);
+  // Con el auto detenido la velocidad instantánea es 0 y el ETA daría infinito;
+  // en ese caso se estima con una velocidad urbana típica.
+  const segs = resta / ((NAV.velKmh > 5 ? NAV.velKmh : 28) / 3.6);
+  $('navEta').textContent = 'llegás ' + fmtClock(new Date(Date.now() + segs * 1000));
+
+  if (paso) anunciarManiobra(i, dManiobra);
+  chequearCamaras(hecho);
+}
+
+function anunciarManiobra(i, d) {
+  const umbrales = umbralesAviso(NAV.velKmh);
+  NAV.avisados[i] = NAV.avisados[i] || {};
+  for (const t of umbrales) {
+    if (d <= t && !NAV.avisados[i][t]) {
+      // Se dan por dichos todos los umbrales que ya quedaron atrás, si no en
+      // el siguiente tick se repite el mismo aviso.
+      umbrales.forEach(x => { if (x >= d) NAV.avisados[i][x] = true; });
+      hablar(fraseManiobra(NAV.pasos[i], d));
+      return;
+    }
+  }
+}
+
+function chequearCamaras(hecho) {
+  const chips = [];
+  for (const c of NAV.camaras) {
+    const d = c.offset - hecho;
+    if (d > -50 && d < 500) {
+      if (!c.aviso && d > 0) {
+        c.aviso = true;
+        hablar('Atención, cámara de velocidad a ' + Math.round(d / 50) * 50 + ' metros'
+               + (c.limite ? ', máxima ' + c.limite : ''));
+      }
+      if (d > 0) {
+        chips.push(`<div class="chip camara">${
+          c.limite ? `<span class="lim">${c.limite}</span>` : '📷'
+        } Cámara a ${fmtDistanciaCorta(d)}</div>`);
+      }
+    }
+  }
+  $('navMedio').innerHTML = chips.join('');
+}
+
+async function recalcular(p) {
+  $('navMsg').textContent = 'Recalculando…';
+  $('navMedio').innerHTML = '<div class="chip recalc">Te saliste de la ruta · recalculando</div>';
+  hablar('Recalculando');
+
+  S.from = { lat: p[0], lon: p[1], label: 'Mi ubicación' };
+  S.departIn = 0;
+  S.busy = false;
+  await route();
+
+  const r = S.routes[S.picked];
+  if (!r) { terminarViaje('No se pudo recalcular la ruta.'); return; }
+  cargarRutaEnNav(r);
+  draw();
+}
+
+$('navSalir').onclick = () => terminarViaje();
+
+/* ============================================================
+   Arranque
+   ============================================================ */
+$('keySave').onclick = async () => {
+  const k = $('keyInput').value.trim();
+  if (!k) return;
+  $('keySave').disabled = true;
+  $('keySave').textContent = 'Verificando…';
+  try {
+    // Consulta mínima para validar la key antes de guardarla.
+    const r = await fetch(`${TT}/search/2/search/obelisco.json?key=${k}&limit=1&countrySet=AR`);
+    if (!r.ok) throw new Error(r.status === 403
+      ? 'La key no es válida. Revisá que la copiaste completa.'
+      : 'TomTom respondió ' + r.status + '.');
+    S.key = k;
+    localStorage.setItem('tt_key', k);
+    $('setup').classList.add('hidden');
+    start();
+  } catch (e) {
+    const err = $('keyErr');
+    err.textContent = e.message.includes('Failed to fetch')
+      ? 'Sin conexión a internet.' : e.message;
+    err.classList.remove('hidden');
+  } finally {
+    $('keySave').disabled = false;
+    $('keySave').textContent = 'Empezar';
+  }
+};
+$('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('keySave').click(); });
+
+/* Permite reemplazar la clave desde la propia app, sin recompilar ni tocar
+   archivos. Sirve si algun dia hay que rotarla. */
+$('resetKey').onclick = e => {
+  e.preventDefault();
+  localStorage.removeItem('tt_key');
+  $('keyInput').value = '';
+  $('keyErr').classList.add('hidden');
+  $('setup').classList.remove('hidden');
+};
+
+function start() {
+  locate(true);
+  setTimeout(() => map.invalidateSize(), 200);
+}
+
+if (S.key) { $('setup').classList.add('hidden'); start(); }
+
+// Recalcular al volver a la app: si estuvo minimizada, el ETA quedó viejo.
+// Navegando, en cambio, lo único que hay que recuperar es el bloqueo de
+// pantalla: Android lo suelta al pasar a segundo plano.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (NAV.on) { mantenerPantalla(true); return; }
+  if (S.from && S.to && S.departIn === 0) route();
+});
+window.addEventListener('resize', () => map.invalidateSize());
+</script>
+</body>
+</html>
