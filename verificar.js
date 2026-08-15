@@ -498,11 +498,46 @@ test('la velocidad de la voz es configurable y se guarda', () => {
   assert.ok(/localStorage\.setItem\('tt_vozVel'/.test(js), 'no se guarda la preferencia');
 });
 
-test('sin voces en español lo dice en vez de fallar callado', () => {
+test('sin ninguna voz lo dice en vez de fallar callado', () => {
   const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
-  assert.ok(/No hay voces en español/.test(f),
-    'si el telefono no tiene voces, el usuario tiene que enterarse');
-  assert.ok(/Salida de texto a voz/.test(f), 'y saber donde instalarlas');
+  assert.ok(/No hay voces disponibles/.test(f),
+    'si no hay ni paquetes ni voces de Android, el usuario tiene que enterarse');
+  assert.ok(/Texto a voz/.test(f), 'y saber dónde instalar voces del sistema');
+});
+
+test('las voces propias y las de Android conviven en una sola lista', () => {
+  const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/optgroup label="Voces de Luz Verde"/.test(f), 'faltan los paquetes propios');
+  assert.ok(/optgroup label="Voces de Android"/.test(f), 'faltan las del sistema');
+  // El prefijo evita que un paquete llamado igual que una voz del sistema
+  // se confundan al guardarse.
+  assert.ok(/value="p:\$\{pq\.id\}"/.test(f) && /value="s:\$\{v\.name\}"/.test(f),
+    'los valores tienen que distinguir el origen');
+});
+
+test('solo se ofrecen los paquetes que existen de verdad', () => {
+  const f = js.match(/async function cargarBancoVoz\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/new Audio\(`\$\{VOZ_DIR\}\$\{pq\.id\}\//.test(f),
+    'hay que probar un audio real: el manifiesto declara los tres siempre');
+  assert.ok(/setTimeout\(\(\) => res\(null\)/.test(f),
+    'sin timeout, una carpeta vacia deja la lista colgada para siempre');
+  assert.ok(/if \(paqueteVoz && !paquetes\.some/.test(f),
+    'si el paquete guardado ya no esta, hay que volver a la voz de Android');
+});
+
+test('si falta un audio suelto, lo dice Android en vez de callarse', () => {
+  const f = js.match(/function decirManiobraPropia\([\s\S]*?\n\}/)[0];
+  assert.ok(/hablarSistema\(fraseManiobra/.test(f),
+    'quedarse sin indicacion manejando es peor que una voz distinta');
+  assert.ok(/clipsBanco\.delete/.test(f),
+    'conviene no reintentar un archivo que ya fallo');
+});
+
+test('la velocidad de habla se oculta con voz grabada', () => {
+  // Sobre un mp3 ya grabado el control no hace nada; dejarlo visible es
+  // prometer algo que no ocurre.
+  assert.ok(/campVel'\)\.style\.display = paqueteVoz \? 'none' : 'block'/.test(js),
+    'el control de velocidad no aplica a los audios grabados');
 });
 
 test('la prueba de voz se escucha aunque este silenciada', () => {

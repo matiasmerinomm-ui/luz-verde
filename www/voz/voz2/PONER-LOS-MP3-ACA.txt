@@ -1,0 +1,3 @@
+Los 42 archivos mp3 del paquete 'voz2' van en esta carpeta.
+Los nombres exactos están en ../FRASES.md
+Cuando estén todos, borrá este archivo.

@@ -1,0 +1,62 @@
+{
+ "version": 2,
+ "sonda": "a-inicio",
+ "clips": [
+  "d-30",
+  "d-50",
+  "d-100",
+  "d-150",
+  "d-200",
+  "d-300",
+  "d-400",
+  "d-500",
+  "d-700",
+  "d-900",
+  "d-1000",
+  "d-1500",
+  "d-2000",
+  "d-3000",
+  "d-5000",
+  "d-8000",
+  "d-12000",
+  "d-20000",
+  "m-izq",
+  "m-der",
+  "m-izq-fuerte",
+  "m-der-fuerte",
+  "m-izq-suave",
+  "m-der-suave",
+  "m-izq-manten",
+  "m-der-manten",
+  "m-derecho",
+  "m-u",
+  "m-salida",
+  "m-salida-izq",
+  "m-salida-der",
+  "m-rot-1",
+  "m-rot-2",
+  "m-rot-3",
+  "m-balsa",
+  "m-llegada",
+  "a-ahora",
+  "a-inicio",
+  "a-recalc",
+  "a-camara",
+  "a-exceso",
+  "a-prueba"
+ ],
+ "paquetes": [
+  {
+   "id": "voz1",
+   "nombre": "Voz 1"
+  },
+  {
+   "id": "voz2",
+   "nombre": "Voz 2"
+  },
+  {
+   "id": "voz3",
+   "nombre": "Voz 3"
+  }
+ ]
+}
