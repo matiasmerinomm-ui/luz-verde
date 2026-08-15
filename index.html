@@ -3,14 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#0e1116">
+<meta name="theme-color" content="#eef5f0">
 <title>Luz Verde</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
+/* ---------------------------------------------------------------------------
+   Paleta de marca — Luz Verde
+   ---------------------------------------------------------------------------
+   Los grises no son neutros: llevan una pizca de verde. Un gris puro al lado
+   del verde de marca se ve sucio, azulado. Con el tinte, toda la interfaz
+   pertenece a la misma familia sin que se note por qué.
+   ------------------------------------------------------------------------ */
 :root{
-  --bg:#0e1116; --card:#171b22; --card2:#1e242e; --line:#2a313d;
-  --txt:#e9edf3; --dim:#98a2b3; --accent:#4da3ff;
-  --ok:#3fb950; --warn:#e3a008; --bad:#f4603e; --crit:#e5484d;
+  --verde:#15873d; --verde-cl:#22c55e; --verde-br:#86efac; --verde-os:#0d5c2c;
+  /* Fondo menta muy claro en vez de casi negro: de día se lee sin esfuerzo y
+     acompaña al verde de marca en vez de pelearse con él. La navegación sí
+     mantiene el cartel oscuro, que es donde el contraste importa manejando. */
+  --bg:#eef5f0; --card:#ffffff; --card2:#f3f8f5; --line:#d5e5da;
+  --txt:#0f2318; --dim:#5d7d6b; --accent:#15873d;
+  --ok:#22c55e; --warn:#eab308; --bad:#f97316; --crit:#ef4444;
   --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -34,7 +45,7 @@ button,input{font-family:inherit;font-size:16px}
   background:var(--card);color:var(--txt);outline:none}
 .field:focus{border-color:var(--accent)}
 .btn{width:100%;padding:15px;border:0;border-radius:12px;background:var(--accent);
-  color:#04121f;font-weight:700;font-size:16px;margin-top:12px}
+  color:#fff;font-weight:700;font-size:16px;margin-top:12px}
 .btn:disabled{opacity:.45}
 .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--dim);font-weight:600}
 
@@ -47,30 +58,73 @@ button,input{font-family:inherit;font-size:16px}
 .dot{width:9px;height:9px;border-radius:50%;flex:none}
 .inputrow input{flex:1;border:0;background:transparent;color:var(--txt);
   padding:13px 0;outline:none;min-width:0}
-.inputrow input::placeholder{color:#5c6675}
+.inputrow input::placeholder{color:#9ab3a5}
 .iconbtn{border:0;background:transparent;color:var(--dim);padding:8px;font-size:17px;flex:none}
-#sug{position:absolute;left:12px;right:12px;background:var(--card2);
+#sug{position:absolute;left:12px;right:12px;background:var(--card);
   border:1px solid var(--line);border-radius:12px;overflow:hidden;z-index:1200;
-  box-shadow:0 12px 32px rgba(0,0,0,.5);max-height:52vh;overflow-y:auto}
+  box-shadow:0 14px 34px rgba(15,35,24,.16);max-height:52vh;overflow-y:auto}
 #sug div{padding:13px 14px;border-bottom:1px solid var(--line)}
 #sug div:last-child{border:0}
 #sug b{display:block;font-weight:600;font-size:14.5px}
 #sug span{color:var(--dim);font-size:12.5px}
 .hidden{display:none!important}
 
+/* selector de modo de viaje */
+#modos{display:flex;gap:7px;margin-top:2px}
+#modos button{flex:1;padding:9px 4px;border-radius:12px;border:1px solid var(--line);
+  background:transparent;color:var(--dim);font-size:12px;font-weight:600;
+  display:flex;flex-direction:column;align-items:center;gap:3px;transition:.12s}
+#modos button .em{font-size:17px;line-height:1}
+#modos button.on{background:var(--verde);border-color:var(--verde);color:#fff}
+
+/* ---------------------------------------------------------------------------
+   Tratamiento del mapa
+   ---------------------------------------------------------------------------
+   Las teselas son de CARTO y se ven como las de cualquier app. Un mapa a medida
+   de verdad necesita un proveedor de teselas vectoriales con editor de estilos
+   (MapTiler, por ejemplo, tiene capa gratuita) — eso es un proyecto en sí.
+
+   Mientras tanto, un filtro CSS las corre hacia nuestra paleta: baja el azul de
+   fondo, sube el verde y apaga los ocres. El resultado no es un mapa único,
+   pero deja de parecer prestado. Los valores están sueltos a propósito para que
+   sean fáciles de tocar.
+   ------------------------------------------------------------------------ */
+.tema-claro .leaflet-tile{
+  filter:saturate(.62) hue-rotate(-12deg) brightness(1.03) contrast(.94);
+}
+.tema-oscuro .leaflet-tile{
+  filter:saturate(.55) hue-rotate(96deg) brightness(.92) contrast(1.06);
+}
+/* La ruta y los marcadores quedan fuera del filtro: si se tiñen también,
+   el contraste que los hace legibles se pierde. */
+.leaflet-overlay-pane,.leaflet-marker-pane,.leaflet-tooltip-pane{filter:none}
+.leaflet-tooltip{background:#fff;color:var(--txt);border:1px solid var(--line);
+  border-radius:8px;font-size:12px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+.leaflet-tooltip-top:before{border-top-color:var(--line)}
+
 /* ---------- mapa ---------- */
-#map{flex:1;background:#11151b;min-height:190px}
-.leaflet-control-attribution{background:rgba(14,17,22,.82)!important;color:#6b7484!important;
-  font-size:9.5px!important}
+#mapwrap{position:relative;flex:1;display:flex;min-height:190px}
+#map{flex:1;background:#e8efe9}
+#btnMenu{position:absolute;top:10px;left:10px;z-index:600;width:46px;height:46px;
+  border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.96);
+  color:var(--txt);font-size:21px;line-height:1;box-shadow:0 4px 14px rgba(15,35,24,.18)}
+body.navegando #btnMenu{display:none}
+#btnTema,#btnVoz{position:absolute;right:10px;z-index:600;width:42px;height:42px;
+  border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.95);
+  color:var(--txt);font-size:19px;line-height:1;box-shadow:0 4px 14px rgba(15,35,24,.18)}
+#btnTema{top:10px}
+#btnVoz{top:60px}
+.leaflet-control-attribution{display:none!important}
 .leaflet-control-attribution a{color:#8b95a6!important}
-.leaflet-bar a{background:var(--card)!important;color:var(--txt)!important;
+.leaflet-bar a{background:#fff!important;color:var(--txt)!important;
   border-color:var(--line)!important}
 
 /* ---------- panel de resultados ---------- */
 #panel{background:var(--card);border-top:1px solid var(--line);
+  animation:subirPanel .3s cubic-bezier(.2,.8,.3,1) both;
   border-radius:18px 18px 0 0;padding:14px 16px calc(var(--safe-bot) + 14px);
   max-height:56vh;overflow-y:auto;z-index:800}
-.grab{width:38px;height:4px;border-radius:3px;background:#39414f;margin:0 auto 12px}
+.grab{width:38px;height:4px;border-radius:3px;background:#c3d8ca;margin:0 auto 12px}
 .eta{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
 .eta .big{font-size:40px;font-weight:750;letter-spacing:-.035em;line-height:1}
 .eta .unit{font-size:17px;color:var(--dim);font-weight:600}
@@ -84,7 +138,7 @@ button,input{font-family:inherit;font-size:16px}
 
 .alt{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:12px;
   border:1px solid var(--line);margin-top:9px}
-.alt.on{border-color:var(--accent);background:#131d2a}
+.alt.on{border-color:var(--accent);background:#e7f6ec}
 .alt .stripe{width:4px;height:32px;border-radius:3px;flex:none}
 .alt .txt{flex:1;min-width:0}
 .alt .t1{font-weight:650;font-size:15px}
@@ -96,7 +150,7 @@ button,input{font-family:inherit;font-size:16px}
 .when button{white-space:nowrap;padding:8px 14px;border-radius:99px;
   border:1px solid var(--line);background:transparent;color:var(--dim);
   font-size:13px;font-weight:600}
-.when button.on{background:var(--accent);border-color:var(--accent);color:#04121f}
+.when button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 
 .steps{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
 .steps summary{color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;list-style:none}
@@ -106,62 +160,191 @@ button,input{font-family:inherit;font-size:16px}
 .steps li b{color:var(--txt);font-weight:600}
 
 #msg{padding:11px 14px;margin:10px 12px;border-radius:11px;font-size:13.5px;
-  background:#2b1d1d;border:1px solid #5a2f2c;color:#ffb4a8}
-#hint{padding:26px 22px;text-align:center;color:var(--dim);font-size:14px}
+  background:#e7f6ec;border:1px solid #b7e0c5;color:#14562c;
+  animation:subirPanel .25s ease both}
+#hint{padding:6px 2px 10px;color:var(--dim);font-size:14px}
+#hintTexto{text-align:center;font-size:13px;margin:16px 0 0}
+
+/* accesos rápidos */
+#lugares{display:flex;gap:9px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
+#lugares::-webkit-scrollbar{display:none}
+.lug{flex:none;min-width:104px;padding:12px 14px;border-radius:14px;
+  border:1px solid var(--line);background:var(--card2);text-align:left;color:var(--txt);
+  display:flex;flex-direction:column;gap:3px;transition:transform .12s,border-color .15s}
+.lug:active{transform:scale(.96)}
+.lug.puesto{border-color:var(--verde-os)}
+.lug .ico{font-size:19px;line-height:1}
+.lug .nom{font-weight:650;font-size:14px}
+.lug .det{font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:150px}
+.lug.vacia .det{color:#9ab3a5;font-style:italic}
+.lug.nuevo{align-items:center;justify-content:center;min-width:64px;
+  border-style:dashed;color:var(--dim);font-size:22px}
+
+/* recientes */
+.rec{display:flex;align-items:center;gap:11px;padding:11px 4px;
+  border-bottom:1px solid var(--line);cursor:pointer}
+.rec:last-child{border-bottom:0}
+.rec .reloj{color:var(--dim);font-size:15px;flex:none}
+.rec .txt{flex:1;min-width:0}
+.rec .t1{color:var(--txt);font-size:14.5px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.rec .borrar{color:#9ab3a5;font-size:15px;padding:4px 6px;flex:none}
+.sechead{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+  font-weight:600;color:var(--dim);margin:16px 0 2px}
 .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line);
   border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;
   vertical-align:-3px;margin-right:7px}
 @keyframes sp{to{transform:rotate(360deg)}}
-.foot{color:#5c6675;font-size:11px;text-align:center;margin-top:14px;line-height:1.5}
-.btn.iniciar{background:var(--ok);color:#05230d;margin-top:14px;font-size:17px}
+.foot{color:#8aa697;font-size:11px;text-align:center;margin-top:14px;line-height:1.5}
+.btn.iniciar{background:var(--verde);color:#fff;margin-top:14px;font-size:17px;
+  box-shadow:0 6px 18px rgba(22,163,74,.35);transition:transform .12s}
+.btn.iniciar:active{transform:scale(.97)}
+@keyframes subirPanel{from{transform:translateY(26px);opacity:0}to{transform:none;opacity:1}}
 .whenlbl{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.08em;
   font-weight:600;margin-top:16px}
+.viapor{color:var(--txt);font-size:14px;margin-top:7px;font-weight:600}
+.tagpeaje{display:inline-block;margin-top:7px;padding:4px 10px;border-radius:8px;
+  background:#fdf3d8;border:1px solid #e6cf90;color:#7a5c10;font-size:12px;font-weight:600}
+.when.evitar button.on{background:var(--bad);border-color:var(--bad);color:#fff}
+#evitarAjustes{flex-wrap:wrap;overflow:visible;margin-top:2px}
+
+/* ---------- hoja de ajustes ---------- */
+/* Menú lateral, como el de cualquier app de navegación: entra desde el borde
+   izquierdo, que es donde está el pulgar cuando sostenés el teléfono. */
+#ajustes{position:fixed;inset:0;z-index:1900;background:rgba(10,30,19,.45);
+  display:flex;align-items:stretch}
+#ajustes .hoja{width:min(88%,380px);background:var(--card);
+  padding:calc(var(--safe-top) + 16px) 18px calc(var(--safe-bot) + 18px);
+  overflow-y:auto;box-shadow:8px 0 34px rgba(10,30,19,.3);
+  animation:entraIzq .26s cubic-bezier(.2,.8,.3,1) both}
+@keyframes entraIzq{from{transform:translateX(-100%)}to{transform:none}}
+.menuCab{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.menuCab img{width:44px;height:44px;border-radius:12px}
+.menuCab b{font-size:18px;letter-spacing:-.01em}
+.menuCab span{display:block;color:var(--dim);font-size:12px;font-weight:400}
+.hojaTit{font-size:12px;margin:22px 0 12px;font-weight:700;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.08em;
+  border-top:1px solid var(--line);padding-top:16px}
+.hojaTit:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.camp{display:block;color:var(--dim);font-size:12px;text-transform:uppercase;
+  letter-spacing:.07em;font-weight:600;margin-bottom:16px}
+.camp .field,.camp input[type=range]{margin-top:7px;text-transform:none;
+  letter-spacing:0;font-weight:400}
+.camp b{color:var(--txt);float:right;text-transform:none;letter-spacing:0}
+.camp input[type=range]{width:100%;accent-color:var(--verde)}
+select.field{appearance:none;background-image:none}
+.ayuda{color:var(--dim);font-size:12px;margin:-10px 0 16px;line-height:1.5}
+/* Los créditos no son decorativos: la licencia de OpenStreetMap obliga a
+   atribuir. Se pueden mover fuera del mapa, pero no eliminar. */
+.creditos{color:#8aa697;font-size:10.5px;line-height:1.6;margin:22px 0 0;text-align:center}
+.creditos a{color:#8aa697;text-decoration:underline}
 
 /* ---------- modo navegación ---------- */
 body.navegando #top,
 body.navegando #panel,
 body.navegando #msg{display:none}
-body.navegando #map{flex:1}
+body.navegando #mapwrap{flex:1}
+body.navegando #btnTema{top:auto;bottom:200px}
+body.navegando #btnVoz{top:auto;bottom:150px}
 
 #nav{position:fixed;inset:0;z-index:1500;pointer-events:none;
      display:flex;flex-direction:column;justify-content:space-between}
 #nav > *{pointer-events:auto}
+/* Entrada escalonada: el cartel baja, la barra sube. Sin esto el cambio de
+   pantalla es un corte seco y se siente como que la app se trabó. */
+#nav.hidden{display:none}
+#nav:not(.hidden) #navTop{animation:bajar .34s cubic-bezier(.2,.8,.3,1) both}
+#nav:not(.hidden) #navBottom{animation:subir .34s cubic-bezier(.2,.8,.3,1) .06s both}
+@keyframes bajar{from{transform:translateY(-130%);opacity:0}to{transform:none;opacity:1}}
+@keyframes subir{from{transform:translateY(130%);opacity:0}to{transform:none;opacity:1}}
+#navDist,#navMsg{transition:opacity .18s}
+.chip{animation:aparecer .25s ease both}
+@keyframes aparecer{from{transform:translateX(-14px);opacity:0}to{transform:none;opacity:1}}
 
-#navTop{background:#12305a;margin:calc(var(--safe-top) + 8px) 8px 0;border-radius:16px;
+#navTop{background:linear-gradient(160deg,#15873d,#0d5c2c);margin:calc(var(--safe-top) + 8px) 8px 0;border-radius:16px;
   padding:15px 17px;display:flex;align-items:center;gap:15px;
   box-shadow:0 10px 30px rgba(0,0,0,.55)}
-#navIcono{font-size:40px;line-height:1;color:#cfe4ff;flex:none;width:46px;text-align:center}
+#navIcono{font-size:40px;line-height:1;color:#bbf7d0;flex:none;width:46px;text-align:center}
 #navDist{font-size:26px;font-weight:750;letter-spacing:-.02em;line-height:1.1}
-#navMsg{font-size:14.5px;color:#bcd2f0;margin-top:3px}
-#navLuego{font-size:12.5px;color:#7f9cc4;margin-top:6px;
+#navMsg{font-size:14.5px;color:#c3e8d1;margin-top:3px}
+#navLuego{font-size:12.5px;color:#84b79a;margin-top:6px;
   border-top:1px solid rgba(255,255,255,.10);padding-top:6px}
 
 #navMedio{margin:0 8px;display:flex;flex-direction:column;gap:7px;align-items:flex-start}
 .chip{padding:9px 14px;border-radius:12px;font-size:13.5px;font-weight:650;
-  box-shadow:0 6px 20px rgba(0,0,0,.5);display:flex;align-items:center;gap:8px}
+  box-shadow:0 6px 20px rgba(0,0,0,.45);display:flex;align-items:center;gap:8px}
 .chip.camara{background:#3a1d1d;border:1px solid #7d3a35;color:#ffc7ba}
 .chip.recalc{background:#2a2410;border:1px solid #6d5a1e;color:#f0d489}
 .chip .lim{background:#fff;color:#b3261e;border-radius:50%;width:26px;height:26px;
   display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;
   border:2px solid #b3261e}
 
-#navBottom{background:var(--card);border-top:1px solid var(--line);
-  border-radius:18px 18px 0 0;padding:13px 16px calc(var(--safe-bot) + 13px);
+#navBottom{background:#0f1d15;color:#e8f0ea;border-top:1px solid #24382c;
+  border-radius:18px 18px 0 0;padding:26px 16px calc(var(--safe-bot) + 13px);
   display:flex;align-items:center;gap:14px}
 #navBottom .blq{text-align:center;min-width:62px}
+.velblq{position:relative}
+#navVel{transition:color .2s}
+.velblq.excedido #navVel{color:var(--crit)}
+.limite{position:absolute;top:-30px;left:50%;transform:translateX(-50%);
+  width:46px;height:46px;border-radius:50%;background:#fff;border:5px solid #d32f2f;
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;font-weight:800;color:#111;box-shadow:0 3px 10px rgba(0,0,0,.5)}
+.velblq.excedido .limite{animation:latir .8s ease-in-out infinite}
+@keyframes latir{0%,100%{transform:translateX(-50%) scale(1)}
+                 50%{transform:translateX(-50%) scale(1.13)}}
+.chip.exceso{background:#3b1414;border:1px solid #8a2f2f;color:#ffc2c2}
 #navBottom .blq b{display:block;font-size:21px;font-weight:700;line-height:1.15;
   font-variant-numeric:tabular-nums}
-#navBottom .blq small{color:var(--dim);font-size:11px}
+#navBottom .blq small{color:#8fae9c;font-size:11px}
 #navBottom .crece{flex:1}
-#navSalir{border:0;border-radius:12px;background:#3a2220;color:#ffb4a8;
+#navSalir{border:0;border-radius:12px;background:#43201c;color:#ffb4a8;
   padding:12px 18px;font-weight:700;font-size:15px}
 
-.flecha .f{width:0;height:0;border-left:12px solid transparent;
-  border-right:12px solid transparent;border-bottom:26px solid var(--accent);
-  filter:drop-shadow(0 2px 5px rgba(0,0,0,.75));transform-origin:50% 65%}
+/* Marcador del vehículo. El triángulo plano de antes se veía como un recorte
+   de papel; esto es un disco con aro blanco, cono de rumbo y sombra propia.
+   La transición hace que se deslice entre lecturas del GPS en vez de saltar
+   de golpe cada segundo. */
+.burb{background:#fff;color:var(--txt);border:1.5px solid var(--line);
+  border-radius:999px;padding:5px 11px;font-size:13px;font-weight:700;
+  white-space:nowrap;box-shadow:0 4px 14px rgba(15,35,24,.28);width:auto!important;
+  height:auto!important;margin:0!important;transform:translate(-50%,-50%)}
+.burb.on{background:var(--verde);border-color:var(--verde-cl);color:#fff}
+.burb .pj{display:block;font-size:10px;font-weight:600;opacity:.85;font-style:normal}
+
+.veh{width:76px;height:76px;transform-origin:50% 58%;
+  transition:transform .95s cubic-bezier(.25,.1,.25,1)}
+.veh svg{width:76px;height:76px;display:block}
+.leaflet-marker-icon.vehwrap{transition:transform .95s linear}
 </style>
 </head>
 <body>
+<script>
+/* Cazador de errores. Va primero de todo, antes que cualquier otro script.
+
+   Si algo revienta al cargar, el navegador deja la página muerta sin decir
+   nada: los botones no responden y parece que la app "no hace nada". Esto lo
+   convierte en un cartel visible, que es la diferencia entre reportar "no anda"
+   y reportar el error exacto. */
+(function () {
+  function mostrar(msg) {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;' +
+      'background:#7f1d1d;color:#fff;font:12px/1.5 monospace;padding:10px 12px;' +
+      'white-space:pre-wrap;max-height:45vh;overflow:auto';
+    d.textContent = 'Luz Verde falló al cargar:\n\n' + msg +
+      '\n\nMandale esta pantalla a quien la programó.';
+    (document.body || document.documentElement).appendChild(d);
+  }
+  window.addEventListener('error', function (e) {
+    mostrar((e.message || 'error') + '\n' + (e.filename || '') + ':' + (e.lineno || '?'));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    mostrar('Promesa rechazada: ' + ((e.reason && e.reason.message) || e.reason));
+  });
+})();
+</script>
 
 <!-- ============ CONFIGURACIÓN ============ -->
 <div id="setup">
@@ -176,7 +359,8 @@ body.navegando #map{flex:1}
          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
   <button id="keySave" class="btn">Empezar</button>
   <div id="keyErr" class="sub hidden" style="color:#ffb4a8;text-align:center"></div>
-  <p class="foot">2.500 consultas por día sin costo.<br>Cada cálculo de ruta usa una.</p>
+  <p class="foot">2.500 consultas por día sin costo.<br>Cada cálculo de ruta usa una.
+    <br><span id="selloSetup" style="opacity:.6"></span></p>
 </div>
 
 <!-- ============ APP ============ -->
@@ -187,23 +371,72 @@ body.navegando #map{flex:1}
     <button class="iconbtn" id="gpsBtn" title="Usar mi ubicación">◎</button>
   </div>
   <div class="inputrow">
-    <i class="dot" style="background:var(--accent)"></i>
-    <input id="toInput" placeholder="¿A dónde vas?" autocomplete="off">
+    <i class="dot" style="background:#ef4444"></i>
+    <input id="toInput" placeholder="¿A dónde vas? Podés pegar un link de Maps" autocomplete="off">
     <button class="iconbtn hidden" id="clearBtn">✕</button>
   </div>
+  <div id="modos"></div>
   <div id="sug" class="hidden"></div>
 </div>
 
 <div id="msg" class="hidden"></div>
-<div id="map"></div>
+<div id="mapwrap">
+  <div id="map"></div>
+  <button id="btnMenu" title="Menú">☰</button>
+  <button id="btnTema" title="Cambiar entre mapa claro y oscuro">☀</button>
+  <button id="btnVoz" title="Modo de voz · mantené pulsado para elegir voz">🔊</button>
+
+</div>
 
 <div id="panel">
   <div class="grab"></div>
   <div id="hint">
-    Escribí una dirección para calcular el tiempo de viaje con el tránsito de ahora.
-    <div class="foot"><a href="#" id="resetKey">Cambiar la API Key</a></div>
+    <div id="lugares"></div>
+    <div id="recientes"></div>
+    <p id="hintTexto">Escribí una dirección o tocá un acceso rápido.</p>
   </div>
   <div id="result" class="hidden"></div>
+</div>
+
+<!-- ============ AJUSTES ============ -->
+<div id="ajustes" class="hidden">
+  <div class="hoja">
+    <div class="menuCab">
+      <img src="../assets/icon.png" alt="">
+      <div><b>Luz Verde</b><span id="sello">Ajustes</span></div>
+    </div>
+
+    <h2 class="hojaTit">Voz y sonido</h2>
+
+    <label class="camp">Voz
+      <select id="selVoz" class="field"></select>
+    </label>
+    <p class="ayuda" id="ayudaVoz"></p>
+
+    <label class="camp" id="campVel">Velocidad al hablar <b id="valVel">1,05×</b>
+      <input type="range" id="rngVel" min="0.7" max="1.5" step="0.05" value="1.05">
+    </label>
+
+    <button class="btn ghost" id="probarVoz">Escuchar una prueba</button>
+
+    <h2 class="hojaTit">Mapa</h2>
+    <div class="when" id="temaAjustes"></div>
+    <p class="ayuda">En automático usa el mapa claro de día y el oscuro de noche.</p>
+
+    <h2 class="hojaTit">Preferencias de ruta</h2>
+    <div class="when evitar" id="evitarAjustes"></div>
+    <p class="ayuda">Se aplican a todas las rutas que calcules. TomTom no ofrece
+      evitar cruces ferroviarios ni zonas peligrosas: eso en otras apps sale de
+      reportes de sus usuarios, no del motor de ruteo.</p>
+
+    <button class="btn" id="cerrarAjustes">Listo</button>
+
+    <p class="creditos">
+      Mapas © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+      y CARTO · Tránsito y rutas de TomTom · Cámaras y límites de OpenStreetMap.
+      <a href="#" id="resetKey">Cambiar la API Key</a>
+    </p>
+  </div>
 </div>
 
 <!-- ============ NAVEGACIÓN ============ -->
@@ -212,7 +445,7 @@ body.navegando #map{flex:1}
     <span id="navIcono">▲</span>
     <div style="flex:1;min-width:0">
       <div id="navDist">—</div>
-      <div id="navMsg">Buscando señal de GPS…</div>
+      <div id="navMsg">Preparando el viaje…</div>
       <div id="navLuego" class="hidden"></div>
     </div>
   </div>
@@ -220,7 +453,10 @@ body.navegando #map{flex:1}
   <div id="navMedio"></div>
 
   <div id="navBottom">
-    <div class="blq"><b id="navVel">0</b><small>km/h</small></div>
+    <div class="blq velblq">
+      <b id="navVel">0</b><small>km/h</small>
+      <div id="navLimite" class="limite hidden"><span>—</span></div>
+    </div>
     <div class="blq crece"><b id="navRest">—</b><small id="navEta">calculando</small></div>
     <button id="navSalir">Salir</button>
   </div>
@@ -400,10 +636,54 @@ function camarasSobreRuta(camaras, puntos, acc, margenM = 90) {
   return salida.sort((a, b) => a.offset - b.offset);
 }
 
+/**
+ * Limites de velocidad que caen sobre la ruta, con su metro de aparicion.
+ *
+ * Misma idea que las camaras: precalcular en que punto del viaje empieza a
+ * regir cada limite, para que despues consultarlo sea mirar una lista ordenada
+ * y no recorrer la geometria entera en cada lectura del GPS.
+ */
+function limitesSobreRuta(tramos, puntos, acc, margenM = 45) {
+  const salida = [];
+  for (const t of tramos) {
+    let mejor = { metros: Infinity, idx: 0, tt: 0 };
+    for (let i = 0; i < puntos.length - 1; i++) {
+      const r = distanciaASegmento([t.lat, t.lon], puntos[i], puntos[i + 1]);
+      if (r.metros < mejor.metros) mejor = { metros: r.metros, idx: i, tt: r.t };
+    }
+    if (mejor.metros <= margenM) {
+      const largo = distancia(puntos[mejor.idx], puntos[mejor.idx + 1]);
+      salida.push({ limite: t.limite, offset: acc[mejor.idx] + largo * mejor.tt });
+    }
+  }
+  salida.sort((a, b) => a.offset - b.offset);
+  // Colapsar repetidos consecutivos: una avenida son decenas de tramos con el
+  // mismo limite y no tiene sentido guardarlos todos.
+  return salida.filter((x, i) => i === 0 || x.limite !== salida[i - 1].limite);
+}
+
+/** Limite vigente a `hecho` metros del inicio, o null si no se conoce. */
+function limiteVigente(limites, hecho) {
+  let actual = null;
+  for (const l of limites) {
+    if (l.offset > hecho + 10) break;
+    actual = l.limite;
+  }
+  return actual;
+}
+
+/** Cuanto hay que pasarse para que valga la pena avisar. */
+function excesoRelevante(velKmh, limite, tolerancia = 7) {
+  if (!limite || !velKmh) return false;
+  // Tolerancia fija mas un margen proporcional: el velocimetro del auto y el
+  // GPS nunca coinciden exactamente, y a 120 el desvio es mayor que a 40.
+  return velKmh > limite + tolerancia + limite * 0.05;
+}
+
 /** Consulta Overpass. Devuelve [] ante cualquier problema: nunca rompe el viaje. */
 async function buscarCamaras(puntos, fetchImpl) {
   const f = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
-  if (!f) return [];
+  if (!f) return { camaras: [], limites: [] };
 
   const lats = puntos.map(p => p[0]), lons = puntos.map(p => p[1]);
   const bbox = [
@@ -411,12 +691,15 @@ async function buscarCamaras(puntos, fetchImpl) {
     Math.max(...lats) + 0.01, Math.max(...lons) + 0.01,
   ].join(',');
 
-  const q = `[out:json][timeout:20];
+  // Una sola consulta para camaras y limites: son el mismo viaje y Overpass es
+  // un servicio comunitario, no conviene pegarle dos veces por ruta.
+  const q = `[out:json][timeout:25];
 (
   node["highway"="speed_camera"](${bbox});
   node["enforcement"="maxspeed"](${bbox});
+  way["maxspeed"]["highway"~"^(motorway|trunk|primary|secondary|tertiary)$"](${bbox});
 );
-out body;`;
+out geom;`;
 
   try {
     const r = await f('https://overpass-api.de/api/interpreter', {
@@ -424,18 +707,78 @@ out body;`;
       body: 'data=' + encodeURIComponent(q),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
-    if (!r.ok) return [];
+    if (!r.ok) return { camaras: [], limites: [] };
     const d = await r.json();
-    return (d.elements || [])
-      .filter(e => e.lat && e.lon)
-      .map(e => ({
-        lat: e.lat,
-        lon: e.lon,
-        limite: parseInt((e.tags && (e.tags.maxspeed || e.tags['maxspeed:forward'])) || '', 10) || null,
-      }));
+    const camaras = [], limites = [];
+    for (const e of (d.elements || [])) {
+      const tags = e.tags || {};
+      const vel = parseInt(tags.maxspeed || tags['maxspeed:forward'] || '', 10) || null;
+
+      if (e.type === 'node' && e.lat) {
+        camaras.push({ lat: e.lat, lon: e.lon, limite: vel });
+      } else if (e.type === 'way' && vel && Array.isArray(e.geometry)) {
+        // Un punto cada tantos vertices alcanza: el limite no cambia en 30 m.
+        for (let i = 0; i < e.geometry.length; i += 3) {
+          limites.push({ lat: e.geometry[i].lat, lon: e.geometry[i].lon, limite: vel });
+        }
+      }
+    }
+    return { camaras, limites };
   } catch (_) {
-    return [];
+    return { camaras: [], limites: [] };
   }
+}
+
+
+/* ----------------------------------------------------------- ubicaciones */
+
+/**
+ * Saca coordenadas de lo que sea que te hayan compartido.
+ *
+ * Google Maps genera media docena de formatos distintos según desde dónde
+ * compartas, y todos terminan en el mismo WhatsApp. Se prueban de más preciso
+ * a menos: el `!3d!4d` del final es la coordenada exacta del lugar, mientras
+ * que el `@` del medio es apenas el centro del mapa en pantalla y puede estar
+ * a cuadras del punto real.
+ *
+ * Devuelve { lat, lon, nombre } o null.
+ */
+function parsearUbicacion(texto) {
+  if (!texto) return null;
+  const t = String(texto).trim();
+  const ok = (la, lo, nombre) => {
+    const lat = parseFloat(la), lon = parseFloat(lo);
+    if (!isFinite(lat) || !isFinite(lon)) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (lat === 0 && lon === 0) return null;      // el "geo:0,0" de relleno
+    return { lat, lon, nombre: nombre ? decodeURIComponent(nombre.replace(/\+/g, ' ')) : null };
+  };
+
+  let m;
+  // 1. El par exacto que Google esconde al final del enlace de un lugar.
+  if ((m = t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/))) return ok(m[1], m[2]);
+
+  // 2. geo:0,0?q=lat,lon(Nombre)  — lo que manda "compartir ubicación".
+  if ((m = t.match(/[?&]q=(-?\d+\.\d+),\s*(-?\d+\.\d+)(?:\s*\(([^)]*)\))?/))) {
+    return ok(m[1], m[2], m[3]);
+  }
+  // 3. query= de los enlaces nuevos de Maps.
+  if ((m = t.match(/[?&]query=(-?\d+\.\d+),\s*(-?\d+\.\d+)/))) return ok(m[1], m[2]);
+  // 4. destination= de los enlaces de indicaciones.
+  if ((m = t.match(/[?&]destination=(-?\d+\.\d+),\s*(-?\d+\.\d+)/))) return ok(m[1], m[2]);
+  // 5. geo:lat,lon pelado.
+  if ((m = t.match(/^geo:(-?\d+\.?\d*),(-?\d+\.?\d*)/i))) return ok(m[1], m[2]);
+  // 6. El @ de la URL: es el centro del mapa, no el lugar. Sirve de aproximación.
+  if ((m = t.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/))) return ok(m[1], m[2]);
+  // 7. Alguien que pega "-34.603, -58.381" a mano.
+  if ((m = t.match(/^\s*(-?\d{1,2}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})\s*$/))) return ok(m[1], m[2]);
+
+  return null;
+}
+
+/** ¿Es un enlace corto de Google, de los que no traen la coordenada adentro? */
+function esEnlaceCorto(texto) {
+  return /(?:maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs)/i.test(String(texto || ''));
 }
 
 /* -------------------------------------------------------------------- desvío */
@@ -498,6 +841,72 @@ function fmtDistanciaCorta(m) {
    ============================================================ */
 const KEY_EMBEBIDA = '';
 
+/* Sello de esta versión. Sirve para saber de un vistazo si el teléfono está
+   corriendo lo último que subiste o una copia vieja del caché — que es
+   imposible de distinguir a ojo y hace perder mucho tiempo. */
+const VERSION_APP = 'lv-0815-337819';
+console.log('Luz Verde ' + VERSION_APP);
+
+/**
+ * Modos de viaje.
+ *
+ * `transito` marca cuáles usan tráfico vehicular: caminando o en bici no
+ * aplica, y pedirlo igual devuelve tiempos de auto disfrazados. Tampoco tiene
+ * sentido avisar de cámaras de velocidad ni de exceso yendo a pie.
+ */
+const MODOS = [
+  { id: 'car',        nombre: 'Auto',  icono: '🚗', transito: true  },
+  { id: 'motorcycle', nombre: 'Moto',  icono: '🏍️', transito: true  },
+  { id: 'bicycle',    nombre: 'Bici',  icono: '🚲', transito: false },
+  { id: 'pedestrian', nombre: 'A pie', icono: '🚶', transito: false },
+];
+const modoActual = () => MODOS.find(m => m.id === S.modo) || MODOS[0];
+
+/**
+ * Todo lo que TomTom permite evitar. Son exactamente estos siete: no hay
+ * forma de pedirle que esquive cruces ferroviarios ni zonas inseguras.
+ */
+const EVITABLES = [
+  ['tollRoads',        'Peajes'],
+  ['motorways',        'Autopistas'],
+  ['ferries',          'Balsas'],
+  ['unpavedRoads',     'Ripio'],
+  ['carpools',         'Carriles VAO'],
+  ['borderCrossings',  'Cruces de frontera'],
+  ['alreadyUsedRoads', 'Repetir camino'],
+];
+
+/**
+ * Pide un plugin nativo sin poder romper la app.
+ *
+ * Un plugin que no está instalado no falla al pedirlo: falla recién al usarlo,
+ * y ahí tira una excepción sincrónica que mata el resto del script. Como todo
+ * esto corre al cargar, el resultado es una app entera muerta — botones que no
+ * responden y ninguna pista de por qué. Pasó exactamente eso con @capacitor/app.
+ *
+ * Por eso: todo pedido y toda llamada a un plugin pasa por acá.
+ */
+function plugin(nombre) {
+  const C = window.Capacitor;
+  if (!C || typeof C.registerPlugin !== 'function') return null;
+  try { return C.registerPlugin(nombre) || null; } catch (_) { return null; }
+}
+
+/** Llama un método de plugin. Devuelve null si no existe o si revienta. */
+function llamarPlugin(pl, metodo, ...args) {
+  if (!pl || typeof pl[metodo] !== 'function') return null;
+  try {
+    const r = pl[metodo](...args);
+    return r && typeof r.catch === 'function' ? r.catch(() => null) : r;
+  } catch (_) { return null; }
+}
+
+/** Preferencias de ruteo. Se leen antes del estado porque S las necesita. */
+function leerEvitar() {
+  try { return JSON.parse(localStorage.getItem('tt_evitar')) || []; }
+  catch (_) { return []; }
+}
+
 /* ============================================================
    Estado
    ============================================================ */
@@ -510,6 +919,8 @@ const S = {
   routes: [],
   picked: 0,
   departIn: 0,         // minutos desde ahora; 0 = salir ya
+  evitar: leerEvitar(),// tollRoads | motorways | ferries | unpavedRoads
+  modo: localStorage.getItem('tt_modo') || 'car',
   layers: [],
   markers: [],
   timer: null,
@@ -525,10 +936,73 @@ const TT = 'https://api.tomtom.com';
 const map = L.map('map', { zoomControl: false, attributionControl: true })
   .setView([-34.6037, -58.3816], 12);
 
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  maxZoom: 19, subdomains: 'abcd',
-  attribution: '&copy; OpenStreetMap &copy; CARTO &middot; Tránsito por TomTom'
-}).addTo(map);
+/* ---------------------------------------------------------------------------
+   Tema del mapa
+   ---------------------------------------------------------------------------
+   El mapa oscuro es lindo de noche e ilegible al mediodía con el sol pegando
+   en la pantalla. Y el claro encandila manejando a la noche. Por eso el modo
+   por defecto es automático según la hora, con un botón para forzarlo cuando
+   la app se equivoca — un día nublado, un túnel, un estacionamiento.
+   ------------------------------------------------------------------------ */
+const TEMAS = {
+  claro: {
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    ruta: '#15803d', alterna: '#9aa8a0', fondo: '#e8e6e1', icono: '☀',
+  },
+  oscuro: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    ruta: '#22c55e', alterna: '#5c6f63', fondo: '#0f1a15', icono: '☾',
+  },
+};
+
+let capaMapa = null;
+let temaActual = 'claro';
+
+/** 'auto' | 'claro' | 'oscuro' — lo elegido por el usuario, no lo aplicado. */
+let preferenciaTema = localStorage.getItem('tt_tema') || 'auto';
+
+function temaSegunHora() {
+  const h = new Date().getHours();
+  return (h >= 20 || h < 7) ? 'oscuro' : 'claro';
+}
+
+function aplicarTema() {
+  const nuevo = preferenciaTema === 'auto' ? temaSegunHora() : preferenciaTema;
+  if (capaMapa && nuevo === temaActual) return;
+  temaActual = nuevo;
+
+  const t = TEMAS[temaActual];
+  if (capaMapa) map.removeLayer(capaMapa);
+  capaMapa = L.tileLayer(t.url, {
+    maxZoom: 19, subdomains: 'abcd',
+    attribution: '&copy; OpenStreetMap &copy; CARTO &middot; Tránsito por TomTom',
+  }).addTo(map);
+  capaMapa.setZIndex(0);
+
+  document.getElementById('map').style.background = t.fondo;
+  document.body.classList.toggle('tema-claro', temaActual === 'claro');
+  document.body.classList.toggle('tema-oscuro', temaActual === 'oscuro');
+  $('btnTema').textContent = preferenciaTema === 'auto' ? t.icono
+    : (temaActual === 'claro' ? '☀' : '☾');
+  $('btnTema').style.opacity = preferenciaTema === 'auto' ? '.75' : '1';
+
+  if (S.routes.length) draw();     // la ruta cambia de color según el tema
+}
+
+$('btnTema').onclick = () => {
+  // auto -> claro -> oscuro -> auto
+  preferenciaTema = preferenciaTema === 'auto' ? 'claro'
+                  : preferenciaTema === 'claro' ? 'oscuro' : 'auto';
+  localStorage.setItem('tt_tema', preferenciaTema);
+  temaActual = null;
+  aplicarTema();
+  if (!$('ajustes').classList.contains('hidden')) pintarTemaAjustes();
+};
+
+aplicarTema();
+// En modo automático se revisa cada 10 minutos: un viaje largo puede cruzar
+// el atardecer y el mapa tiene que acompañar.
+setInterval(() => { if (preferenciaTema === 'auto') aplicarTema(); }, 600000);
 
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
@@ -613,20 +1087,28 @@ async function route() {
   S.busy = true;
   renderLoading();
 
+  const M = modoActual();
   const p = new URLSearchParams({
     key: S.key,
-    traffic: 'true',                  // <- tránsito en vivo
-    travelMode: 'car',
+    traffic: M.transito ? 'true' : 'false',
+    travelMode: M.id,
     routeType: 'fastest',
     computeTravelTimeFor: 'all',      // <- devuelve además el tiempo típico y sin tránsito
     maxAlternatives: '2',
-    sectionType: 'traffic',           // <- tramos con demora, para pintar la ruta
     instructionsType: 'text',
     language: 'es-ES',
   });
+  if (M.transito) p.append('sectionType', 'traffic');
+  // Peajes y autopistas solo tienen sentido en vehículo.
+  if (M.transito) {
+    p.append('sectionType', 'tollRoad');
+    p.append('sectionType', 'motorway');
+  }
+
   if (S.departIn > 0) {
     p.set('departAt', isoLocal(new Date(Date.now() + S.departIn * 60000)));
   }
+  if (M.transito && S.evitar.length) p.set('avoid', S.evitar.join(','));
 
   const loc = `${S.from.lat},${S.from.lon}:${S.to.lat},${S.to.lon}`;
 
@@ -637,6 +1119,7 @@ async function route() {
     S.picked = 0;
     refresh();
     scheduleRefresh();
+    if (!NAV.on) registrarReciente(S.to);
   } catch (e) {
     showMsg(e.message);
     $('hint').classList.remove('hidden');
@@ -665,6 +1148,9 @@ function parseRoute(r) {
     typical, free,
     arrival: s.arrivalTime ? new Date(s.arrivalTime) : null,
     sections: (r.sections || []).filter(x => x.sectionType === 'TRAFFIC'),
+    // TomTom no informa el precio del peaje en el plan gratuito, pero sí marca
+    // los tramos donde hay uno. Saber que hay peaje ya cambia la decisión.
+    peaje: (r.sections || []).some(x => x.sectionType === 'TOLL_ROAD'),
     // Los pasos alimentan tanto la lista escrita como la guía por voz, así que
     // se conservan la maniobra y el punto, no solo el texto.
     steps: ((r.guidance && r.guidance.instructions) || [])
@@ -673,52 +1159,152 @@ function parseRoute(r) {
         mensaje: i.message,
         offset: i.routeOffsetInMeters || 0,
         maniobra: i.maneuver || i.instructionType || 'STRAIGHT',
-        calle: i.street || '',
+        calle: i.street || i.roadNumbers?.[0] || '',
         punto: i.point ? [i.point.latitude, i.point.longitude] : null,
       })),
   };
 }
 
-/* Color por magnitud de demora que devuelve TomTom (0 = leve … 4 = corte). */
-const JAM = [
-  { c: '#7cc4ff', t: 'leve' },
-  { c: '#e3a008', t: 'moderada' },
-  { c: '#f4603e', t: 'fuerte' },
-  { c: '#e5484d', t: 'muy fuerte' },
-  { c: '#a1191d', t: 'cortado' },
+/**
+ * Nombre corto de la ruta, al estilo "Por Camino del Buen Ayre".
+ *
+ * Se elige la vía por la que más metros se transita, no la primera ni la más
+ * larga en nombre: es la que un porteño usaría para describir el camino.
+ */
+function nombreRuta(r) {
+  const metros = {};
+  const pasos = r.steps;
+  for (let i = 0; i < pasos.length; i++) {
+    const calle = (pasos[i].calle || '').trim();
+    if (!calle) continue;
+    const hasta = i + 1 < pasos.length ? pasos[i + 1].offset : r.meters;
+    metros[calle] = (metros[calle] || 0) + Math.max(0, hasta - pasos[i].offset);
+  }
+  const mejor = Object.entries(metros).sort((a, b) => b[1] - a[1])[0];
+  // Si esa vía es menos del 15% del viaje, nombrarla confunde más que ayuda.
+  return mejor && mejor[1] > r.meters * 0.15 ? mejor[0] : null;
+}
+
+/* ---------------------------------------------------------------------------
+   Escala de congestión — segundos de demora por kilómetro
+   ---------------------------------------------------------------------------
+   TomTom trae un campo `magnitudeOfDelay` de 0 a 4, pero es inservible para
+   esto: el 0 significa "desconocido" (no "leve"), y la documentación no dice a
+   cuántos segundos equivale cada nivel. Es una etiqueta sin unidad.
+
+   Así que se usa `delayInSeconds` del tramo dividido por su largo real. Eso da
+   un número comparable entre una avenida y una autopista, y con un significado
+   que se puede decir en voz alta.
+
+   Qué velocidad implica cada umbral, sobre una vía de 60 km/h:
+       30 s/km  ->  ~40 km/h   se nota, todavía fluye
+       90 s/km  ->  ~24 km/h   congestionado de verdad
+      200 s/km  ->  ~14 km/h   paso de hombre
+
+   Los números son ajustables: si en la calle te parecen mal calibrados, se
+   tocan estos cuatro valores y listo.
+   ------------------------------------------------------------------------ */
+const ESCALA_DEMORA = [
+  { hasta: 30,       c: '#facc15', t: 'lento' },
+  { hasta: 90,       c: '#fb923c', t: 'congestionado' },
+  { hasta: 200,      c: '#ef4444', t: 'muy congestionado' },
+  { hasta: Infinity, c: '#991b1b', t: 'detenido' },
 ];
+
+/** Largo real de un tramo, en metros, según los índices que da TomTom. */
+function largoTramo(seccion, puntos) {
+  let m = 0;
+  const hasta = Math.min(seccion.endPointIndex, puntos.length - 1);
+  for (let i = Math.max(0, seccion.startPointIndex); i < hasta; i++) {
+    m += distancia(puntos[i], puntos[i + 1]);
+  }
+  return m;
+}
+
+/**
+ * Clasifica un tramo con demora. Devuelve null si no amerita pintarse:
+ * pintar de amarillo una demora de 5 segundos es ruido visual.
+ */
+function clasificarDemora(seccion, puntos) {
+  // Corte de calle: TomTom usa el 4 justamente para cierres y demoras
+  // indefinidas, y ahí el cálculo por segundos no aplica.
+  if (seccion.magnitudeOfDelay === 4 || (seccion.effectiveSpeedInKmh ?? 99) < 5) {
+    return { c: '#7f1d1d', t: 'cortado', porKm: Infinity };
+  }
+  const metros = largoTramo(seccion, puntos);
+  if (metros < 40) return null;
+
+  const porKm = (seccion.delayInSeconds || 0) / (metros / 1000);
+  if (porKm < 12) return null;
+  const nivel = ESCALA_DEMORA.find(e => porKm < e.hasta);
+  return { ...nivel, porKm };
+}
 
 function draw() {
   S.layers.forEach(l => map.removeLayer(l));
   S.markers.forEach(m => map.removeLayer(m));
   S.layers = []; S.markers = [];
 
+  const T = TEMAS[temaActual] || TEMAS.oscuro;
+
   // Alternativas primero, apagadas, para que la elegida quede arriba.
   S.routes.forEach((r, i) => {
     if (i === S.picked) return;
     S.layers.push(L.polyline(r.points, {
-      color: '#6b7484', weight: 4, opacity: .5
+      color: T.alterna, weight: 4, opacity: .55
     }).addTo(map).on('click', () => { S.picked = i; refresh(); }));
   });
 
   const r = S.routes[S.picked];
+  // Contorno bajo la ruta: sobre un mapa claro, una línea de color plano se
+  // confunde con las avenidas del propio mapa. El borde la despega.
   S.layers.push(L.polyline(r.points, {
-    color: '#4da3ff', weight: 7, opacity: .95, lineJoin: 'round'
+    color: temaActual === 'claro' ? '#ffffff' : '#0b1220',
+    weight: 12, opacity: .9, lineJoin: 'round', lineCap: 'round',
+  }).addTo(map));
+  S.layers.push(L.polyline(r.points, {
+    color: T.ruta, weight: 7, opacity: .98, lineJoin: 'round', lineCap: 'round',
   }).addTo(map));
 
-  // Encima, los tramos congestionados con su color real.
+  // Encima, los tramos con demora, coloreados por segundos perdidos por km.
   r.sections.forEach(sec => {
     const seg = r.points.slice(sec.startPointIndex, sec.endPointIndex + 1);
     if (seg.length < 2) return;
-    const j = JAM[Math.min(4, Math.max(0, sec.magnitudeOfDelay || 0))];
-    S.layers.push(L.polyline(seg, { color: j.c, weight: 7, opacity: .98 }).addTo(map));
+    const n = clasificarDemora(sec, r.points);
+    if (!n) return;
+    S.layers.push(L.polyline(seg, {
+      color: n.c, weight: 7, opacity: .98, lineCap: 'round',
+    }).addTo(map).bindTooltip(
+      `${n.t}${isFinite(n.porKm) ? ` · +${Math.round(n.porKm)} s/km` : ''}`,
+      { direction: 'top', opacity: .95 }));
+  });
+
+  // Etiqueta de tiempo sobre cada ruta, como Waze. Se ancla a un punto lejos
+  // del inicio para que las burbujas de las alternativas no se pisen entre sí.
+  S.routes.forEach((ruta, i) => {
+    const m = S.scored ? S.scored[i] : null;
+    const mins = Math.round(ruta.seconds / 60);
+    const pos = ruta.points[Math.floor(ruta.points.length * (0.42 + i * 0.13) % 0.92)];
+    const elegida = i === S.picked;
+    const burbuja = L.marker(pos, {
+      interactive: true,
+      zIndexOffset: elegida ? 900 : 400,
+      icon: L.divIcon({
+        className: 'burb' + (elegida ? ' on' : ''),
+        html: `<span>${mins} min</span>${ruta.peaje ? '<i class="pj">peaje</i>' : ''}`,
+        iconSize: null,
+      }),
+    }).addTo(map);
+    burbuja.on('click', () => { S.picked = i; refresh(); });
+    S.markers.push(burbuja);
   });
 
   const pin = (ll, color) => L.circleMarker(ll, {
-    radius: 8, color: '#0e1116', weight: 3, fillColor: color, fillOpacity: 1
+    radius: 8, weight: 3, fillColor: color, fillOpacity: 1,
+    color: temaActual === 'claro' ? '#ffffff' : '#0e1116',
   }).addTo(map);
-  S.markers.push(pin(r.points[0], '#3fb950'));
-  S.markers.push(pin(r.points[r.points.length - 1], '#4da3ff'));
+  S.markers.push(pin(r.points[0], '#22c55e'));
+  S.markers.push(pin(r.points[r.points.length - 1], '#ef4444'));
 
   // Navegando manda la cámara que sigue al vehículo: reencuadrar acá le
   // arrebataría el mapa al conductor en cada actualización de posición.
@@ -798,6 +1384,9 @@ function render() {
     </details>` : '';
 
   const whens = [[0, 'Ahora'], [15, '+15 min'], [30, '+30 min'], [60, '+1 h'], [120, '+2 h']];
+  const nombre = nombreRuta(r);
+  const M = modoActual();
+
 
   $('result').innerHTML = `
     <div class="eta">
@@ -805,10 +1394,16 @@ function render() {
       <span class="arr">llegás<b>${fmtClock(arrival)}</b></span>
     </div>
     <div class="sub">${fmtDist(r.meters)} · ${S.to.label}</div>
+    ${nombre ? `<div class="viapor">Por ${nombre}</div>` : ''}
+    ${r.peaje ? '<div class="tagpeaje">Esta ruta tiene peaje</div>' : ''}
+    ${!M.transito ? `<div class="sub">Modo ${M.nombre.toLowerCase()}: sin datos de tránsito vehicular.</div>` : ''}
     ${vs ? `<div style="margin-top:9px">${vs}</div>` : ''}
     ${badge}
     ${jam}
     <button class="btn iniciar" id="btnIniciar">Iniciar viaje</button>
+    ${!M.transito ? '' : '<div class="whenlbl">Evitar</div>'}
+    <div class="when evitar" ${M.transito ? '' : 'hidden'}>${EVITABLES.slice(0, 4).map(([v, t]) =>
+      `<button data-ev="${v}" class="${S.evitar.includes(v) ? 'on' : ''}">${t}</button>`).join('')}</div>
     <div class="whenlbl">Salida</div>
     <div class="when">${whens.map(([v, t]) =>
       `<button data-w="${v}" class="${S.departIn === v ? 'on' : ''}">${t}</button>`).join('')}</div>
@@ -825,6 +1420,8 @@ function render() {
   $('result').querySelectorAll('.when button').forEach(el =>
     el.onclick = () => { S.departIn = +el.dataset.w; route(); });
   $('btnIniciar').onclick = () => iniciarViaje();
+  $('result').querySelectorAll('.evitar button').forEach(
+    el => el.onclick = () => alternarEvitar(el.dataset.ev));
 }
 
 /* Refresco automático: el tránsito cambia, el ETA de hace 10 minutos miente. */
@@ -901,10 +1498,7 @@ function geoNativo() {
   if (!C) return null;
   if (typeof C.isNativePlatform === 'function' && !C.isNativePlatform()) return null;
   if (C.Plugins && C.Plugins.Geolocation) return C.Plugins.Geolocation;
-  if (typeof C.registerPlugin === 'function') {
-    try { return C.registerPlugin('Geolocation'); } catch (_) { return null; }
-  }
-  return null;
+  return plugin('Geolocation');
 }
 
 /** Pide el permiso explícitamente. Devuelve 'granted' | 'denied' | 'na'. */
@@ -955,31 +1549,413 @@ async function locate(silent) {
 
 $('gpsBtn').onclick = () => locate(false);
 
+
+/* ============================================================
+   Lugares guardados y recientes
+   ============================================================
+   Todo vive en este teléfono. No hay cuenta, no hay servidor: tus direcciones
+   de casa y trabajo no salen del aparato.
+   ============================================================ */
+const FIJOS = [
+  { id: 'casa',    nombre: 'Casa',    icono: '🏠' },
+  { id: 'trabajo', nombre: 'Trabajo', icono: '💼' },
+];
+const MAX_RECIENTES = 6;
+
+function leerJSON(clave, porDefecto) {
+  try { return JSON.parse(localStorage.getItem(clave)) ?? porDefecto; }
+  catch (_) { return porDefecto; }
+}
+let lugares   = leerJSON('tt_lugares', {});
+let recientes = leerJSON('tt_recientes', []);
+
+const guardarLugares   = () => localStorage.setItem('tt_lugares', JSON.stringify(lugares));
+const guardarRecientes = () => localStorage.setItem('tt_recientes', JSON.stringify(recientes));
+
+/** Va a un destino guardado: lo carga arriba y calcula la ruta. */
+function irA(destino) {
+  S.to = { lat: destino.lat, lon: destino.lon, label: destino.label };
+  $('toInput').value = destino.label;
+  $('clearBtn').classList.remove('hidden');
+  $('sug').classList.add('hidden');
+  if (!S.from) locate(false);
+  else route();
+}
+
+/**
+ * Guarda el destino actual en una ranura.
+ *
+ * Se pide el destino ya elegido en vez de abrir un buscador aparte: es un paso
+ * menos y evita duplicar toda la lógica de búsqueda.
+ */
+function asignarLugar(id, nombre) {
+  if (!S.to) {
+    showMsg('Primero buscá la dirección arriba, después tocá ' + nombre + ' para guardarla.');
+    return;
+  }
+  lugares[id] = { lat: S.to.lat, lon: S.to.lon, label: S.to.label, nombre };
+  guardarLugares();
+  pintarLugares();
+  showMsg(nombre + ' guardado.');
+}
+
+function olvidarLugar(id, nombre) {
+  delete lugares[id];
+  guardarLugares();
+  pintarLugares();
+  showMsg(nombre + ' borrado.');
+}
+
+/** Mantener pulsado sobre un lugar guardado ofrece cambiarlo o borrarlo. */
+function alMantenerPulsado(el, accion) {
+  let t = null;
+  const arranca = () => { t = setTimeout(() => { t = null; accion(); }, 550); };
+  const corta = () => { if (t) { clearTimeout(t); t = null; } };
+  el.addEventListener('touchstart', arranca, { passive: true });
+  el.addEventListener('touchend', corta);
+  el.addEventListener('touchmove', corta);
+  el.addEventListener('mousedown', arranca);
+  el.addEventListener('mouseup', corta);
+  el.addEventListener('mouseleave', corta);
+  el.addEventListener('contextmenu', e => { e.preventDefault(); corta(); accion(); });
+}
+
+function pintarLugares() {
+  const cont = $('lugares');
+  const propios = Object.entries(lugares)
+    .filter(([id]) => !FIJOS.some(f => f.id === id))
+    .map(([id, v]) => ({ id, nombre: v.nombre || 'Lugar', icono: '📍' }));
+  const todos = FIJOS.concat(propios);
+
+  cont.innerHTML = todos.map(f => {
+    const g = lugares[f.id];
+    return `<button class="lug ${g ? 'puesto' : 'vacia'}" data-id="${f.id}" data-nom="${f.nombre}">
+      <span class="ico">${f.icono}</span>
+      <span class="nom">${f.nombre}</span>
+      <span class="det">${g ? g.label : 'sin definir'}</span>
+    </button>`;
+  }).join('') + `<button class="lug nuevo" id="lugNuevo" title="Guardar el destino actual">+</button>`;
+
+  cont.querySelectorAll('.lug[data-id]').forEach(el => {
+    const id = el.dataset.id, nom = el.dataset.nom;
+    el.onclick = () => (lugares[id] ? irA(lugares[id]) : asignarLugar(id, nom));
+    alMantenerPulsado(el, () => {
+      if (!lugares[id]) return asignarLugar(id, nom);
+      if (confirm(`¿Borrar ${nom}?\n${lugares[id].label}`)) olvidarLugar(id, nom);
+    });
+  });
+
+  $('lugNuevo').onclick = () => {
+    if (!S.to) { showMsg('Buscá primero una dirección para guardarla.'); return; }
+    const nombre = (prompt('¿Con qué nombre lo guardo?', S.to.label.split(',')[0]) || '').trim();
+    if (!nombre) return;
+    asignarLugar('l' + Date.now(), nombre);
+  };
+}
+
+/** Se llama al calcular una ruta, no al escribir: solo entra lo que se usó. */
+function registrarReciente(destino) {
+  if (!destino) return;
+  recientes = recientes.filter(r => r.label !== destino.label);
+  recientes.unshift({ lat: destino.lat, lon: destino.lon, label: destino.label });
+  recientes = recientes.slice(0, MAX_RECIENTES);
+  guardarRecientes();
+  pintarRecientes();
+}
+
+function pintarRecientes() {
+  const cont = $('recientes');
+  if (!recientes.length) { cont.innerHTML = ''; return; }
+  cont.innerHTML = '<div class="sechead">Recientes</div>' + recientes.map((r, i) =>
+    `<div class="rec" data-i="${i}">
+       <span class="reloj">🕘</span>
+       <span class="txt"><span class="t1">${r.label}</span></span>
+       <span class="borrar" data-borrar="${i}">✕</span>
+     </div>`).join('');
+
+  cont.querySelectorAll('.rec').forEach(el => {
+    el.onclick = e => {
+      if (e.target.dataset.borrar !== undefined) {
+        recientes.splice(+e.target.dataset.borrar, 1);
+        guardarRecientes();
+        pintarRecientes();
+        return;
+      }
+      irA(recientes[+el.dataset.i]);
+    };
+  });
+}
+
+function pintarModos() {
+  $('modos').innerHTML = MODOS.map(m =>
+    `<button data-modo="${m.id}" class="${S.modo === m.id ? 'on' : ''}">` +
+    `<span class="em">${m.icono}</span>${m.nombre}</button>`).join('');
+  $('modos').querySelectorAll('button').forEach(el => el.onclick = () => {
+    if (S.modo === el.dataset.modo) return;
+    S.modo = el.dataset.modo;
+    localStorage.setItem('tt_modo', S.modo);
+    pintarModos();
+    if (S.from && S.to) route();
+  });
+}
+
+pintarModos();
+pintarLugares();
+pintarRecientes();
+
 /* ============================================================
    Navegación
    ============================================================ */
 const NAV = {
   on: false, watchId: null,
   puntos: [], acc: [], total: 0, pasos: [], idxTramo: 0,
-  camaras: [], avisados: {}, desvio: {},
+  camaras: [], limites: [], avisados: {}, desvio: {},
+  ultimoAvisoExceso: 0, limitePintado: null,
   marker: null, wake: null, velKmh: 0, ultimaVoz: 0,
+  rumboPintado: 0, zoomPintado: null,
 };
+
+/* Marcador del vehículo: disco verde de marca, aro blanco para despegarlo
+   del mapa, y un cono que muestra hacia dónde apunta. */
+const MARCADOR_SVG = `<div class="veh"><svg viewBox="0 0 76 76">
+  <defs><linearGradient id="cono" x1="0" y1="1" x2="0" y2="0">
+    <stop offset="0%" stop-color="#22c55e" stop-opacity=".45"/>
+    <stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>
+  </linearGradient></defs>
+  <path d="M38 44 L9 4 L67 4 Z" fill="url(#cono)"/>
+  <circle cx="38" cy="44" r="19" fill="#0b1310" opacity=".35"/>
+  <circle cx="38" cy="44" r="16.5" fill="#ffffff"/>
+  <circle cx="38" cy="44" r="13" fill="#16a34a"/>
+  <path d="M38 35 L31 49 L38 45.6 L45 49 Z" fill="#ffffff"/>
+</svg></div>`;
+
+/* ============================================================
+   Voz propia — banco de frases grabadas
+   ============================================================
+   La app arma cada indicación encadenando dos audios: la distancia y la
+   maniobra. "En 300 metros" + "girá a la izquierda".
+
+   Los nombres de calles no se dicen nunca: el vocabulario grabado es finito y
+   las calles no. Van en pantalla, como en los GPS de tablero. Es una pérdida
+   menor a cambio de que la voz suene bien.
+
+   Si falta cualquier audio, esa frase la dice la voz de Android. Nunca te
+   quedás sin aviso por un archivo que no esté.
+   ============================================================ */
+const VOZ_DIR = 'voz/';
+let clipsBanco = null;              // nombres de clip que declara el manifiesto
+let paquetes = [];                  // paquetes de voz efectivamente presentes
+let paqueteVoz = localStorage.getItem('tt_paquete') || '';   // '' = voz de Android
+
+/** Escala fija de distancias habladas. Cada valor es un archivo. */
+const CUBOS_DIST = [30, 50, 100, 150, 200, 300, 400, 500, 700, 900,
+                    1000, 1500, 2000, 3000, 5000, 8000, 12000, 20000];
+
+function cuboDistancia(m) {
+  if (m < 25) return null;                // "ahora"
+  let mejor = CUBOS_DIST[0];
+  for (const c of CUBOS_DIST) if (Math.abs(c - m) < Math.abs(mejor - m)) mejor = c;
+  return 'd-' + mejor;
+}
+
+/** Maniobra de TomTom -> clip. Lo que no está mapeado cae en "seguí derecho". */
+const CLIP_MANIOBRA = {
+  TURN_LEFT: 'm-izq', TURN_RIGHT: 'm-der',
+  SHARP_LEFT: 'm-izq-fuerte', SHARP_RIGHT: 'm-der-fuerte',
+  BEAR_LEFT: 'm-izq-suave', BEAR_RIGHT: 'm-der-suave',
+  KEEP_LEFT: 'm-izq-manten', KEEP_RIGHT: 'm-der-manten',
+  STRAIGHT: 'm-derecho', DEPART: 'm-derecho', FOLLOW: 'm-derecho',
+  MAKE_UTURN: 'm-u', TRY_MAKE_UTURN: 'm-u', ROUNDABOUT_BACK: 'm-u',
+  TAKE_EXIT: 'm-salida',
+  MOTORWAY_EXIT_LEFT: 'm-salida-izq', MOTORWAY_EXIT_RIGHT: 'm-salida-der',
+  TAKE_FERRY: 'm-balsa',
+  ARRIVE: 'm-llegada', ARRIVE_LEFT: 'm-llegada', ARRIVE_RIGHT: 'm-llegada',
+};
+
+/**
+ * Descubre qué paquetes de voz están realmente cargados.
+ *
+ * No alcanza con leer el manifiesto: declara los tres paquetes siempre, pero
+ * las carpetas pueden estar vacías. Se prueba un audio de cada uno; el que
+ * responde, existe. Así la lista muestra solo lo que de verdad suena.
+ */
+async function cargarBancoVoz() {
+  let man;
+  try {
+    const r = await fetch(VOZ_DIR + 'manifiesto.json', { cache: 'no-cache' });
+    if (!r.ok) return;
+    man = await r.json();
+  } catch (_) { return; }
+  if (!Array.isArray(man.clips) || !man.clips.length) return;
+
+  clipsBanco = new Set(man.clips);
+  const sonda = man.sonda || man.clips[0];
+
+  const presentes = await Promise.all((man.paquetes || []).map(pq =>
+    new Promise(res => {
+      const a = new Audio(`${VOZ_DIR}${pq.id}/${sonda}.mp3`);
+      a.oncanplaythrough = () => res(pq);
+      a.onerror = () => res(null);
+      a.preload = 'auto';
+      a.load();
+      setTimeout(() => res(null), 4000);   // sin respuesta = no está
+    })));
+
+  paquetes = presentes.filter(Boolean);
+  if (paqueteVoz && !paquetes.some(p => p.id === paqueteVoz)) paqueteVoz = '';
+  pintarSelectorVoz();
+}
+cargarBancoVoz();
 
 /* -- voz ------------------------------------------------------------------ */
 
 let vozEs = null;
-function elegirVoz() {
+let vocesEs = [];
+let vozElegida = localStorage.getItem('tt_vozNombre') || '';
+let velocidadVoz = parseFloat(localStorage.getItem('tt_vozVel')) || 1.05;
+
+/**
+ * Junta las voces en español instaladas en el teléfono.
+ *
+ * La app no puede fabricar voces: usa las del sistema. Por eso lo único
+ * honesto es dejar elegir entre las que hay. Las rioplatenses van primero
+ * porque son las que menos chocan escuchándolas en Buenos Aires.
+ */
+function cargarVoces() {
   const vs = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
-  vozEs = vs.find(v => /es[-_]AR/i.test(v.lang))
-       || vs.find(v => /es[-_](419|MX|US|CL|UY)/i.test(v.lang))
-       || vs.find(v => /^es/i.test(v.lang)) || null;
+  const peso = v => (/es[-_]AR/i.test(v.lang) ? 0
+                   : /es[-_](UY|CL|419|MX)/i.test(v.lang) ? 1
+                   : /es[-_]US/i.test(v.lang) ? 2 : 3);
+  // Android suele exponer la misma voz varias veces (una por motor instalado).
+  // Sin deduplicar, el selector muestra "Español (Argentina)" tres veces y
+  // parece roto.
+  const vistas = new Set();
+  vocesEs = vs
+    .filter(v => /^es/i.test(v.lang))
+    .filter(v => {
+      const clave = (v.name + '|' + v.lang).toLowerCase();
+      if (vistas.has(clave)) return false;
+      vistas.add(clave);
+      return true;
+    })
+    .sort((a, b) => peso(a) - peso(b));
+
+  vozEs = vocesEs.find(v => v.name === vozElegida) || vocesEs[0] || null;
+  pintarSelectorVoz();
 }
 if ('speechSynthesis' in window) {
-  elegirVoz();
-  speechSynthesis.onvoiceschanged = elegirVoz;
+  cargarVoces();
+  // En Android las voces llegan asincrónicas: sin este evento, la primera
+  // lectura devuelve una lista vacía y quedaría siempre la voz por defecto.
+  speechSynthesis.onvoiceschanged = cargarVoces;
 }
 
-function hablar(texto) {
+function pintarSelectorVoz() {
+  const sel = $('selVoz'), ayuda = $('ayudaVoz');
+  if (!sel) return;
+
+  const PAIS = { AR: 'Argentina', UY: 'Uruguay', CL: 'Chile', MX: 'México',
+                 ES: 'España', US: 'Estados Unidos', CO: 'Colombia', PE: 'Perú',
+                 '419': 'Latinoamérica' };
+
+  // Una sola lista con las dos familias. El valor lleva prefijo para saber
+  // cuál es cuál: "p:voz1" es un paquete grabado, "s:Nombre" una voz de Android.
+  let html = '';
+  if (paquetes.length) {
+    html += '<optgroup label="Voces de Luz Verde">' + paquetes.map(pq =>
+      `<option value="p:${pq.id}" ${paqueteVoz === pq.id ? 'selected' : ''}>` +
+      `${pq.nombre}</option>`).join('') + '</optgroup>';
+  }
+  if (vocesEs.length) {
+    html += '<optgroup label="Voces de Android">' + vocesEs.map((v, i) => {
+      const cod = (v.lang.split(/[-_]/)[1] || '').toUpperCase();
+      return `<option value="s:${v.name}" ` +
+             `${!paqueteVoz && v === vozEs ? 'selected' : ''}>` +
+             `Voz ${i + 1} · ${PAIS[cod] || v.lang}</option>`;
+    }).join('') + '</optgroup>';
+  }
+
+  if (!html) {
+    sel.innerHTML = '<option>No hay voces disponibles</option>';
+    sel.disabled = true;
+    ayuda.textContent = 'Tu teléfono no tiene voces en español instaladas y '
+      + 'todavía no cargaste ningún paquete propio.';
+    return;
+  }
+  sel.disabled = false;
+  sel.innerHTML = html;
+
+  ayuda.innerHTML = paquetes.length
+    ? `${paquetes.length} ${paquetes.length === 1 ? 'voz propia' : 'voces propias'} `
+      + 'de Luz Verde. Las de Android son las que tenga instaladas tu teléfono; '
+      + 'la app no puede fabricar otras.'
+    : 'Todavía no hay voces propias cargadas. Las de Android son las que tenga '
+      + 'instaladas tu teléfono. Para sumar más: <b>Ajustes de Android → '
+      + 'Administración general → Idioma → Texto a voz → motor de Google → '
+      + 'Instalar datos de voz</b>.';
+}
+
+
+
+
+function hayBanco() { return !!paqueteVoz && !!clipsBanco; }
+
+/** Reproduce una lista de clips en fila. Si uno falla, corta y avisa. */
+function reproducirClips(claves) {
+  return new Promise((listo, falla) => {
+    let i = 0;
+    const siguiente = () => {
+      if (i >= claves.length) return listo();
+      const a = new Audio(`${VOZ_DIR}${paqueteVoz}/${claves[i++]}.mp3`);
+      a.onended = siguiente;
+      a.onerror = () => falla(new Error('falta ' + a.src));
+      a.play().catch(falla);
+    };
+    siguiente();
+  });
+}
+
+/**
+ * Intenta decir una maniobra con la voz propia.
+ * Devuelve false si no se puede, para que el llamador use la voz del sistema.
+ */
+function decirManiobraPropia(paso, metros) {
+  if (!hayBanco()) return false;
+  const clipMan = CLIP_MANIOBRA[paso.maniobra] || 'm-derecho';
+  const clipDist = cuboDistancia(metros);
+  const claves = (clipDist ? [clipDist, clipMan] : [clipMan])
+    .filter(c => clipsBanco.has(c));
+  if (!claves.length) return false;
+
+  reproducirClips(claves).catch(() => {
+    // El archivo estaba en el manifiesto pero no en el disco: se degrada a
+    // la voz de Android en vez de dejar al conductor sin indicación.
+    clipsBanco.delete(claves[0]);
+    hablarSistema(fraseManiobra(paso, metros));
+  });
+  return true;
+}
+
+function decirAlertaPropia(clave, textoRespaldo) {
+  if (!hayBanco() || !clipsBanco.has(clave)) return false;
+  reproducirClips([clave]).catch(() => hablarSistema(textoRespaldo));
+  return true;
+}
+
+/* Modos: 'todo' habla las maniobras y las alertas; 'alertas' solo avisa de
+   camaras y excesos; 'mudo' no dice nada. */
+let modoVoz = localStorage.getItem('tt_voz') || 'todo';
+const VOZ_ICONO = { todo: '🔊', alertas: '🔔', mudo: '🔇' };
+const VOZ_TEXTO = { todo: 'Voz completa', alertas: 'Solo alertas', mudo: 'Silenciada' };
+
+function hablar(texto, tipo = 'maniobra') {
+  if (modoVoz === 'mudo') return;
+  if (modoVoz === 'alertas' && tipo !== 'alerta') return;
+  hablarSistema(texto);
+}
+
+/** La voz de Android. Es el respaldo cuando no hay clip grabado. */
+function hablarSistema(texto) {
   if (!('speechSynthesis' in window) || !texto) return;
   // No encimar avisos. Dos voces superpuestas no se entienden y el conductor
   // termina ignorando las dos.
@@ -987,7 +1963,7 @@ function hablar(texto) {
   const u = new SpeechSynthesisUtterance(texto);
   u.lang = 'es-AR';
   if (vozEs) u.voice = vozEs;
-  u.rate = 1.05;
+  u.rate = velocidadVoz;
   speechSynthesis.speak(u);
   NAV.ultimaVoz = Date.now();
 }
@@ -1019,8 +1995,13 @@ function cargarRutaEnNav(r) {
   // Las cámaras se piden una vez por ruta y en segundo plano: si Overpass
   // tarda o falla, el viaje arranca igual.
   NAV.camaras = [];
-  buscarCamaras(r.points).then(cs => {
-    NAV.camaras = camarasSobreRuta(cs, NAV.puntos, NAV.acc);
+  NAV.limites = [];
+  // Caminando no hay cámaras de velocidad que te importen ni límite que
+  // superar: pedir esos datos sería gastar la consulta y molestar con avisos.
+  if (!modoActual().transito) return;
+  buscarCamaras(r.points).then(res => {
+    NAV.camaras = camarasSobreRuta(res.camaras || [], NAV.puntos, NAV.acc);
+    NAV.limites = limitesSobreRuta(res.limites || [], NAV.puntos, NAV.acc);
   });
 }
 
@@ -1034,7 +2015,21 @@ function iniciarViaje() {
   document.body.classList.add('navegando');
   $('nav').classList.remove('hidden');
   clearInterval(S.timer);
-  setTimeout(() => { map.invalidateSize(); draw(); }, 60);
+
+  // Arranque inmediato. Ya sabemos dónde está el auto —es el origen de la ruta
+  // que acaba de calcular— así que se pinta la primera maniobra al instante en
+  // vez de mostrar "Buscando señal" mientras llega el primer punto del GPS.
+  // Ese cartel solo aparece si de verdad no hay señal.
+  requestAnimationFrame(() => {
+    map.invalidateSize();
+    draw();
+    const inicio = NAV.puntos[0];
+    NAV.rumboPintado = rumbo(NAV.puntos[0], NAV.puntos[Math.min(6, NAV.puntos.length - 1)]);
+    NAV.zoomPintado = 17;
+    map.flyTo(inicio, 17, { duration: 1.25, easeLinearity: .25 });
+    pintarNav(inicio, NAV.rumboPintado,
+              { idx: 0, metros: 0, t: 0 }, 0, NAV.total);
+  });
 
   mantenerPantalla(true);
   // El primer hablar() tiene que salir del gesto del usuario: Android bloquea
@@ -1144,7 +2139,7 @@ function onPosicion(pos) {
   const resta = Math.max(0, NAV.total - hecho);
 
   if (resta < 40) {
-    hablar('Llegaste a destino');
+    hablar('Llegaste a destino', 'alerta');
     terminarViaje('Llegaste a destino.');
     return;
   }
@@ -1167,16 +2162,33 @@ function pintarNav(p, rumboGps, u, hecho, resta) {
 
   if (!NAV.marker) {
     NAV.marker = L.marker(p, {
-      icon: L.divIcon({ className: 'flecha', html: '<div class="f"></div>',
-                        iconSize: [24, 26], iconAnchor: [12, 17] }),
+      icon: L.divIcon({ className: 'vehwrap', html: MARCADOR_SVG,
+                        iconSize: [76, 76], iconAnchor: [38, 44] }),
       zIndexOffset: 1000,
     }).addTo(map);
   }
   NAV.marker.setLatLng(p);
   const el = NAV.marker.getElement();
-  if (el) { const f = el.querySelector('.f'); if (f) f.style.transform = `rotate(${rot}deg)`; }
+  if (el) {
+    const v = el.querySelector('.veh');
+    // Giro por el camino corto: sin esto, pasar de 350 a 10 grados hace que el
+    // marcador pegue una vuelta completa en sentido contrario.
+    if (v) {
+      let delta = ((rot - NAV.rumboPintado + 540) % 360) - 180;
+      NAV.rumboPintado += delta;
+      v.style.transform = `rotate(${NAV.rumboPintado}deg)`;
+    }
+  }
 
-  map.setView(p, zoomPorVelocidad(NAV.velKmh), { animate: true, duration: 0.6 });
+  // Cámara suave. El zoom solo se toca cuando cambia de escalón, si no el mapa
+  // vibra en cada lectura del GPS.
+  const z = zoomPorVelocidad(NAV.velKmh);
+  if (z !== NAV.zoomPintado) {
+    NAV.zoomPintado = z;
+    map.flyTo(p, z, { duration: 1.1, easeLinearity: .3 });
+  } else {
+    map.panTo(p, { animate: true, duration: .95, easeLinearity: 1 });
+  }
 
   const i = pasoActual(NAV.pasos, hecho);
   const paso = NAV.pasos[i];
@@ -1198,6 +2210,7 @@ function pintarNav(p, rumboGps, u, hecho, resta) {
   $('navEta').textContent = 'llegás ' + fmtClock(new Date(Date.now() + segs * 1000));
 
   if (paso) anunciarManiobra(i, dManiobra);
+  chequearVelocidad(hecho);
   chequearCamaras(hecho);
 }
 
@@ -1209,21 +2222,65 @@ function anunciarManiobra(i, d) {
       // Se dan por dichos todos los umbrales que ya quedaron atrás, si no en
       // el siguiente tick se repite el mismo aviso.
       umbrales.forEach(x => { if (x >= d) NAV.avisados[i][x] = true; });
+      if (modoVoz === 'todo' && decirManiobraPropia(NAV.pasos[i], d)) return;
       hablar(fraseManiobra(NAV.pasos[i], d));
       return;
     }
   }
 }
 
+/**
+ * Control de velocidad contra el límite del tramo.
+ *
+ * El aviso se espacia 25 segundos: en una autopista donde venís 10 km/h arriba
+ * de forma sostenida, repetirlo cada segundo hace que el conductor silencie la
+ * app entera — y ahí perdés también los avisos que sí importan.
+ */
+function chequearVelocidad(hecho) {
+  const lim = limiteVigente(NAV.limites, hecho);
+  const cont = $('navLimite');
+  const blq = cont.parentElement;
+
+  if (!lim) {
+    cont.classList.add('hidden');
+    blq.classList.remove('excedido');
+    NAV.excesoChip = null;
+    return;
+  }
+  if (lim !== NAV.limitePintado) {
+    NAV.limitePintado = lim;
+    cont.firstElementChild.textContent = lim;
+  }
+  cont.classList.remove('hidden');
+
+  const excede = excesoRelevante(NAV.velKmh, lim);
+  blq.classList.toggle('excedido', excede);
+  NAV.excesoChip = excede
+    ? `<div class="chip exceso">⚠ ${Math.round(NAV.velKmh)} km/h en zona de ${lim}</div>`
+    : null;
+
+  if (excede && Date.now() - NAV.ultimoAvisoExceso > 25000) {
+    NAV.ultimoAvisoExceso = Date.now();
+    const textoEx = `Vas a ${Math.round(NAV.velKmh)}. El máximo acá es ${lim}`;
+    if (modoVoz === 'mudo' || !decirAlertaPropia('a-exceso', textoEx)) {
+      hablar(textoEx, 'alerta');
+    }
+  }
+}
+
 function chequearCamaras(hecho) {
-  const chips = [];
+  const chips = NAV.excesoChip ? [NAV.excesoChip] : [];
   for (const c of NAV.camaras) {
     const d = c.offset - hecho;
     if (d > -50 && d < 500) {
       if (!c.aviso && d > 0) {
         c.aviso = true;
-        hablar('Atención, cámara de velocidad a ' + Math.round(d / 50) * 50 + ' metros'
-               + (c.limite ? ', máxima ' + c.limite : ''));
+        const textoCam = 'Atención, cámara de velocidad a '
+          + Math.round(d / 50) * 50 + ' metros'
+          + (c.limite ? ', máxima ' + c.limite : '');
+        if (modoVoz === 'mudo' || !decirAlertaPropia('a-camara', textoCam)) {
+          hablar(textoCam, 'alerta');
+        }
       }
       if (d > 0) {
         chips.push(`<div class="chip camara">${
@@ -1238,7 +2295,8 @@ function chequearCamaras(hecho) {
 async function recalcular(p) {
   $('navMsg').textContent = 'Recalculando…';
   $('navMedio').innerHTML = '<div class="chip recalc">Te saliste de la ruta · recalculando</div>';
-  hablar('Recalculando');
+  if (modoVoz === 'mudo' || !decirAlertaPropia('a-recalc', 'Recalculando'))
+    hablar('Recalculando', 'alerta');
 
   S.from = { lat: p[0], lon: p[1], label: 'Mi ubicación' };
   S.departIn = 0;
@@ -1253,6 +2311,184 @@ async function recalcular(p) {
 
 $('navSalir').onclick = () => terminarViaje();
 
+/* Ciclo: voz completa -> solo alertas -> silenciada. Se prueba al cambiar,
+   para que sepas cómo suena sin tener que salir a manejar. */
+function pintarBotonVoz() {
+  $('btnVoz').textContent = VOZ_ICONO[modoVoz];
+  $('btnVoz').title = VOZ_TEXTO[modoVoz];
+  $('btnVoz').style.opacity = modoVoz === 'mudo' ? '.55' : '1';
+}
+$('btnVoz').onclick = () => {
+  modoVoz = modoVoz === 'todo' ? 'alertas' : modoVoz === 'alertas' ? 'mudo' : 'todo';
+  localStorage.setItem('tt_voz', modoVoz);
+  pintarBotonVoz();
+
+/** Único punto donde se toca la preferencia: si no, las dos pantallas se
+ *  desincronizan y una muestra lo contrario de la otra. */
+function alternarEvitar(v) {
+  S.evitar = S.evitar.includes(v) ? S.evitar.filter(x => x !== v) : S.evitar.concat(v);
+  localStorage.setItem('tt_evitar', JSON.stringify(S.evitar));
+  pintarEvitarAjustes();
+  if (S.from && S.to) route(); else if (S.routes.length) refresh();
+}
+
+const TEMAS_OPC = [['auto', 'Automático'], ['claro', 'Claro'], ['oscuro', 'Oscuro']];
+
+function pintarTemaAjustes() {
+  $('temaAjustes').innerHTML = TEMAS_OPC.map(([v, t]) =>
+    `<button data-tema="${v}" class="${preferenciaTema === v ? 'on' : ''}">${t}</button>`).join('');
+  $('temaAjustes').querySelectorAll('button').forEach(el => el.onclick = () => {
+    preferenciaTema = el.dataset.tema;
+    localStorage.setItem('tt_tema', preferenciaTema);
+    temaActual = null;
+    aplicarTema();
+    pintarTemaAjustes();
+  });
+}
+
+function pintarEvitarAjustes() {
+  $('evitarAjustes').innerHTML = EVITABLES.map(([v, t]) =>
+    `<button data-ev="${v}" class="${S.evitar.includes(v) ? 'on' : ''}">${t}</button>`).join('');
+  $('evitarAjustes').querySelectorAll('button').forEach(
+    el => el.onclick = () => alternarEvitar(el.dataset.ev));
+}
+
+/* Ajustes */
+const abrirAjustes = () => {
+  $('sello').textContent = 'Versión ' + VERSION_APP;
+  pintarSelectorVoz();
+  pintarEvitarAjustes();
+  pintarTemaAjustes();
+  $('rngVel').value = velocidadVoz;
+  // La velocidad es de la síntesis de Android: sobre un audio grabado no aplica.
+  $('campVel').style.display = paqueteVoz ? 'none' : 'block';
+  $('valVel').textContent = velocidadVoz.toFixed(2).replace('.', ',') + '×';
+  $('ajustes').classList.remove('hidden');
+};
+$('btnMenu').onclick = abrirAjustes;
+alMantenerPulsado($('btnVoz'), abrirAjustes);
+
+$('cerrarAjustes').onclick = () => $('ajustes').classList.add('hidden');
+$('ajustes').onclick = e => { if (e.target.id === 'ajustes') $('ajustes').classList.add('hidden'); };
+$('cerrarAjustes').textContent = 'Cerrar';
+
+$('selVoz').onchange = e => {
+  const [tipo, valor] = [e.target.value.slice(0, 1), e.target.value.slice(2)];
+  if (tipo === 'p') {
+    paqueteVoz = valor;
+  } else {
+    paqueteVoz = '';
+    vozElegida = valor;
+    vozEs = vocesEs.find(v => v.name === vozElegida) || vozEs;
+    localStorage.setItem('tt_vozNombre', vozElegida);
+  }
+  localStorage.setItem('tt_paquete', paqueteVoz);
+  probarVoz();
+};
+$('rngVel').oninput = e => {
+  velocidadVoz = parseFloat(e.target.value);
+  $('valVel').textContent = velocidadVoz.toFixed(2).replace('.', ',') + '×';
+  localStorage.setItem('tt_vozVel', String(velocidadVoz));
+};
+$('rngVel').onchange = () => probarVoz();
+
+function probarVoz() {
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  NAV.ultimaVoz = 0;
+  const antes = modoVoz;
+  modoVoz = 'todo';                       // la prueba se escucha aunque esté en silencio
+  hablar('En 300 metros, girá a la izquierda en Avenida Santa Fe');
+  modoVoz = antes;
+}
+$('probarVoz').onclick = probarVoz;
+  showMsg('Voz: ' + VOZ_TEXTO[modoVoz]);
+  if (modoVoz !== 'mudo') {
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    NAV.ultimaVoz = 0;
+    hablar(modoVoz === 'todo' ? 'Voz completa' : 'Solo alertas', 'alerta');
+  }
+};
+pintarBotonVoz();
+
+/** Único punto donde se toca la preferencia: si no, las dos pantallas se
+ *  desincronizan y una muestra lo contrario de la otra. */
+function alternarEvitar(v) {
+  S.evitar = S.evitar.includes(v) ? S.evitar.filter(x => x !== v) : S.evitar.concat(v);
+  localStorage.setItem('tt_evitar', JSON.stringify(S.evitar));
+  pintarEvitarAjustes();
+  if (S.from && S.to) route(); else if (S.routes.length) refresh();
+}
+
+const TEMAS_OPC = [['auto', 'Automático'], ['claro', 'Claro'], ['oscuro', 'Oscuro']];
+
+function pintarTemaAjustes() {
+  $('temaAjustes').innerHTML = TEMAS_OPC.map(([v, t]) =>
+    `<button data-tema="${v}" class="${preferenciaTema === v ? 'on' : ''}">${t}</button>`).join('');
+  $('temaAjustes').querySelectorAll('button').forEach(el => el.onclick = () => {
+    preferenciaTema = el.dataset.tema;
+    localStorage.setItem('tt_tema', preferenciaTema);
+    temaActual = null;
+    aplicarTema();
+    pintarTemaAjustes();
+  });
+}
+
+function pintarEvitarAjustes() {
+  $('evitarAjustes').innerHTML = EVITABLES.map(([v, t]) =>
+    `<button data-ev="${v}" class="${S.evitar.includes(v) ? 'on' : ''}">${t}</button>`).join('');
+  $('evitarAjustes').querySelectorAll('button').forEach(
+    el => el.onclick = () => alternarEvitar(el.dataset.ev));
+}
+
+/* Ajustes */
+const abrirAjustes = () => {
+  $('sello').textContent = 'Versión ' + VERSION_APP;
+  pintarSelectorVoz();
+  pintarEvitarAjustes();
+  pintarTemaAjustes();
+  $('rngVel').value = velocidadVoz;
+  // La velocidad es de la síntesis de Android: sobre un audio grabado no aplica.
+  $('campVel').style.display = paqueteVoz ? 'none' : 'block';
+  $('valVel').textContent = velocidadVoz.toFixed(2).replace('.', ',') + '×';
+  $('ajustes').classList.remove('hidden');
+};
+$('btnMenu').onclick = abrirAjustes;
+alMantenerPulsado($('btnVoz'), abrirAjustes);
+
+$('cerrarAjustes').onclick = () => $('ajustes').classList.add('hidden');
+$('ajustes').onclick = e => { if (e.target.id === 'ajustes') $('ajustes').classList.add('hidden'); };
+$('cerrarAjustes').textContent = 'Cerrar';
+
+$('selVoz').onchange = e => {
+  const [tipo, valor] = [e.target.value.slice(0, 1), e.target.value.slice(2)];
+  if (tipo === 'p') {
+    paqueteVoz = valor;
+  } else {
+    paqueteVoz = '';
+    vozElegida = valor;
+    vozEs = vocesEs.find(v => v.name === vozElegida) || vozEs;
+    localStorage.setItem('tt_vozNombre', vozElegida);
+  }
+  localStorage.setItem('tt_paquete', paqueteVoz);
+  probarVoz();
+};
+$('rngVel').oninput = e => {
+  velocidadVoz = parseFloat(e.target.value);
+  $('valVel').textContent = velocidadVoz.toFixed(2).replace('.', ',') + '×';
+  localStorage.setItem('tt_vozVel', String(velocidadVoz));
+};
+$('rngVel').onchange = () => probarVoz();
+
+function probarVoz() {
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  NAV.ultimaVoz = 0;
+  const antes = modoVoz;
+  modoVoz = 'todo';                       // la prueba se escucha aunque esté en silencio
+  hablar('En 300 metros, girá a la izquierda en Avenida Santa Fe');
+  modoVoz = antes;
+}
+$('probarVoz').onclick = probarVoz;
+
 /* ============================================================
    Arranque
    ============================================================ */
@@ -1262,8 +2498,15 @@ $('keySave').onclick = async () => {
   $('keySave').disabled = true;
   $('keySave').textContent = 'Verificando…';
   try {
-    // Consulta mínima para validar la key antes de guardarla.
-    const r = await fetch(`${TT}/search/2/search/obelisco.json?key=${k}&limit=1&countrySet=AR`);
+    // Consulta mínima para validar la key antes de guardarla. Con tope de
+    // tiempo: sin él, una red que no responde deja el botón en "Verificando…"
+    // para siempre y parece que la app se colgó.
+    const corte = new AbortController();
+    const reloj = setTimeout(() => corte.abort(), 12000);
+    const r = await fetch(
+      `${TT}/search/2/search/obelisco.json?key=${k}&limit=1&countrySet=AR`,
+      { signal: corte.signal });
+    clearTimeout(reloj);
     if (!r.ok) throw new Error(r.status === 403
       ? 'La key no es válida. Revisá que la copiaste completa.'
       : 'TomTom respondió ' + r.status + '.');
@@ -1273,8 +2516,10 @@ $('keySave').onclick = async () => {
     start();
   } catch (e) {
     const err = $('keyErr');
-    err.textContent = e.message.includes('Failed to fetch')
-      ? 'Sin conexión a internet.' : e.message;
+    err.textContent =
+      e.name === 'AbortError' ? 'TomTom no respondió. Revisá la conexión y reintentá.'
+      : /Failed to fetch|NetworkError/i.test(e.message) ? 'Sin conexión a internet.'
+      : e.message || 'No se pudo verificar la clave.';
     err.classList.remove('hidden');
   } finally {
     $('keySave').disabled = false;
@@ -1293,11 +2538,120 @@ $('resetKey').onclick = e => {
   $('setup').classList.remove('hidden');
 };
 
+
+/* ============================================================
+   Ubicaciones compartidas
+   ============================================================
+   Alguien te manda un punto por WhatsApp y querés ir ahí. Puede llegar de tres
+   formas: pegado en el buscador, abriendo el enlace con la app, o como un link
+   corto de Google que no trae la coordenada adentro y hay que expandir.
+   ============================================================ */
+
+/** Los enlaces cortos hay que seguirlos hasta el final para ver el destino. */
+async function expandirEnlaceCorto(url) {
+  // Va por el puente nativo justamente para saltear CORS: desde el WebView,
+  // Google no deja leer su respuesta.
+  const r = await llamarPlugin(plugin('CapacitorHttp'), 'get',
+                               { url, headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!r) return null;
+  return parsearUbicacion(r.url || '')
+      || parsearUbicacion(typeof r.data === 'string' ? r.data : '');
+}
+
+/** Toma cualquier texto y, si tiene una ubicación adentro, arma el viaje. */
+async function usarUbicacionCompartida(texto, etiqueta) {
+  let u = parsearUbicacion(texto);
+
+  if (!u && esEnlaceCorto(texto)) {
+    showMsg('Abriendo el enlace compartido…');
+    u = await expandirEnlaceCorto(texto.match(/https?:\/\/\S+/)[0]);
+    if (!u) {
+      showMsg('Ese enlace corto de Google no se puede abrir desde acá. Abrilo en '
+            + 'el navegador y compartí la dirección que aparece arriba.');
+      return false;
+    }
+  }
+  if (!u) return false;
+
+  const nombre = u.nombre || etiqueta || `${u.lat.toFixed(5)}, ${u.lon.toFixed(5)}`;
+  irA({ lat: u.lat, lon: u.lon, label: nombre });
+  showMsg('Destino tomado de la ubicación compartida.');
+  return true;
+}
+
+/* Pegar en el buscador: el camino que siempre funciona, en la app y en la web. */
+$('toInput').addEventListener('paste', e => {
+  const texto = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+  if (parsearUbicacion(texto) || esEnlaceCorto(texto)) {
+    e.preventDefault();
+    $('toInput').value = 'Leyendo ubicación…';
+    usarUbicacionCompartida(texto).then(ok => {
+      if (!ok) $('toInput').value = '';
+    });
+  }
+});
+
+/* Abrir la app desde un enlace: geo: o un link de Maps. */
+(function conectarEnlacesEntrantes() {
+  const app = plugin('App');
+  if (!app) return;
+  const atender = url => { if (url) usarUbicacionCompartida(url); };
+
+  const inicial = llamarPlugin(app, 'getLaunchUrl');
+  if (inicial && typeof inicial.then === 'function') {
+    inicial.then(r => atender(r && r.url));
+  }
+  llamarPlugin(app, 'addListener', 'appUrlOpen', d => atender(d && d.url));
+})();
+
+/* ============================================================
+   Botón Atrás de Android
+   ============================================================
+   Por defecto, el botón físico cierra la app de una: estás navegando, lo tocás
+   sin querer y perdiste el viaje. Acá retrocede de a una pantalla, como
+   cualquier app, y recién sale cuando ya no queda nada atrás.
+   ============================================================ */
+function retroceder() {
+  if (!$('ajustes').classList.contains('hidden')) {
+    $('ajustes').classList.add('hidden');
+    return true;
+  }
+  if (NAV.on) {
+    terminarViaje();
+    return true;
+  }
+  if (!$('sug').classList.contains('hidden')) {
+    $('sug').classList.add('hidden');
+    return true;
+  }
+  if (S.routes.length || S.to) {
+    $('clearBtn').click();            // vuelve a la pantalla de escribir destino
+    return true;
+  }
+  return false;                        // nada que deshacer: que salga
+}
+
+(function conectarAtras() {
+  const app = plugin('App');
+  const enganchado = llamarPlugin(app, 'addListener', 'backButton', () => {
+    if (!retroceder()) llamarPlugin(app, 'exitApp');
+  });
+  if (enganchado) return;
+
+  // En el navegador no hay botón físico, pero sí el gesto de volver. Se
+  // mantiene una entrada de más en el historial para poder interceptarlo.
+  history.pushState({ app: true }, '');
+  window.addEventListener('popstate', () => {
+    if (retroceder()) history.pushState({ app: true }, '');
+  });
+})();
+
 function start() {
   locate(true);
   setTimeout(() => map.invalidateSize(), 200);
 }
 
+$('selloSetup').textContent = VERSION_APP;
 if (S.key) { $('setup').classList.add('hidden'); start(); }
 
 // Recalcular al volver a la app: si estuvo minimizada, el ETA quedó viejo.
