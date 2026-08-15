@@ -404,10 +404,36 @@ test('la pantalla se mantiene encendida durante el viaje', () => {
     'no se recupera el bloqueo al volver a la app');
 });
 
-test('el GPS continuo usa el plugin de Capacitor si esta', () => {
-  const f = js.match(/function seguirPosicion\(\)[\s\S]*?\n\}/)[0];
-  assert.ok(/Capacitor/.test(f) && /watchPosition/.test(f),
-    'dentro del APK el seguimiento fallaria sin el plugin');
+/** Quita comentarios de línea: si no, un comentario que nombra una función
+ *  altera el orden aparente de las llamadas y arruina los tests de secuencia. */
+function soloCodigo(txt) {
+  return txt.split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+}
+
+test('el GPS continuo usa el plugin nativo y pide permiso antes', () => {
+  const f = soloCodigo(js.match(/async function seguirPosicion\(\)[\s\S]*?\n\}/)[0]);
+  assert.ok(/geoNativo\(\)/.test(f) && /watchPosition/.test(f),
+    'dentro del APK el seguimiento fallaria sin el plugin nativo');
+  assert.ok(f.indexOf('pedirPermisoUbicacion') < f.indexOf('watchPosition'),
+    'el permiso tiene que pedirse ANTES de arrancar el seguimiento: si no, ' +
+    'watchPosition no falla, simplemente nunca llama de vuelta y la pantalla ' +
+    'queda en "Buscando señal" para siempre');
+});
+
+test('el plugin se obtiene con registerPlugin, no solo de Capacitor.Plugins', () => {
+  // Sin empaquetador, Capacitor.Plugins.Geolocation puede no existir. Si solo
+  // se lee de ahi, la app cae a navigator.geolocation, que dentro del WebView
+  // deniega sin mostrar el dialogo de Android.
+  const f = js.match(/function geoNativo\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/registerPlugin\('Geolocation'\)/.test(f),
+    'falta el registerPlugin: en un proyecto sin bundler es la unica via');
+});
+
+test('hay una salida visible cuando falta el permiso', () => {
+  assert.ok(/function navSinPermiso\(\)/.test(js),
+    'sin esto el usuario ve "Buscando señal" y no sabe que el problema es el permiso');
+  const f = js.match(/function navSinPermiso\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/pedirPermisoUbicacion/.test(f), 'el boton tiene que reintentar el permiso');
 });
 
 test('el desvio se evalua contra el reloj, no de golpe', () => {
