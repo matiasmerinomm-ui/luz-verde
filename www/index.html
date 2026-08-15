@@ -884,17 +884,49 @@ document.addEventListener('click', e => {
 /* ============================================================
    GPS
    ============================================================ */
-/* Dentro del APK hay que usar el plugin de Capacitor: es el que dispara el
-   pedido de permiso de Android en tiempo de ejecución. navigator.geolocation
-   a secas funciona en el navegador pero dentro del WebView falla sin ruido.
-   Se prueba el plugin primero y se cae al navegador si no está. */
+/* ---------------------------------------------------------------------------
+   Ubicación
+   ---------------------------------------------------------------------------
+   Dentro del APK hay que usar el plugin nativo de Capacitor. navigator.geolocation
+   a secas parece funcionar pero NO dispara el diálogo de permiso de Android:
+   el WebView simplemente responde "denegado" sin preguntar nada, y desde afuera
+   se ve igual que si el usuario hubiera dicho que no.
+
+   Y no alcanza con leer Capacitor.Plugins.Geolocation: sin un empaquetador ese
+   objeto puede no existir. registerPlugin() lo crea contra el puente nativo,
+   que es lo que sí funciona en un proyecto sin bundler como este.
+   ------------------------------------------------------------------------ */
+function geoNativo() {
+  const C = window.Capacitor;
+  if (!C) return null;
+  if (typeof C.isNativePlatform === 'function' && !C.isNativePlatform()) return null;
+  if (C.Plugins && C.Plugins.Geolocation) return C.Plugins.Geolocation;
+  if (typeof C.registerPlugin === 'function') {
+    try { return C.registerPlugin('Geolocation'); } catch (_) { return null; }
+  }
+  return null;
+}
+
+/** Pide el permiso explícitamente. Devuelve 'granted' | 'denied' | 'na'. */
+async function pedirPermisoUbicacion() {
+  const g = geoNativo();
+  if (!g || typeof g.requestPermissions !== 'function') return 'na';
+  try {
+    const r = await g.requestPermissions({ permissions: ['location'] });
+    const estado = (r && (r.location || r.coarseLocation)) || 'denied';
+    return estado === 'granted' || estado === 'prompt' ? 'granted' : 'denied';
+  } catch (_) {
+    return 'denied';
+  }
+}
+
 function getPosition(opts) {
-  const cap = window.Capacitor;
-  const plugin = cap && cap.Plugins && cap.Plugins.Geolocation;
-  if (plugin) {
-    return plugin.requestPermissions()
-      .catch(() => null)                       // en web el método no existe
-      .then(() => plugin.getCurrentPosition(opts));
+  const g = geoNativo();
+  if (g) {
+    return pedirPermisoUbicacion().then(estado => {
+      if (estado === 'denied') return Promise.reject({ code: 1 });
+      return g.getCurrentPosition(opts);
+    });
   }
   if (!navigator.geolocation) return Promise.reject({ code: 2 });
   return new Promise((res, rej) =>
@@ -1014,10 +1046,10 @@ function iniciarViaje() {
 function terminarViaje(mensaje) {
   NAV.on = false;
 
-  const cap = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
+  const g = geoNativo();
   if (NAV.watchId != null) {
     try {
-      if (cap && typeof NAV.watchId === 'string') cap.clearWatch({ id: NAV.watchId });
+      if (g) g.clearWatch({ id: NAV.watchId });
       else navigator.geolocation.clearWatch(NAV.watchId);
     } catch (_) {}
     NAV.watchId = null;
@@ -1036,22 +1068,57 @@ function terminarViaje(mensaje) {
   if (mensaje) showMsg(mensaje);
 }
 
-function seguirPosicion() {
-  const cap = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
+async function seguirPosicion() {
   const opts = { enableHighAccuracy: true, timeout: 15000, maximumAge: 1000 };
+  const g = geoNativo();
 
-  if (cap) {
-    cap.watchPosition(opts, (pos) => { if (pos) onPosicion(pos); })
-       .then(id => { NAV.watchId = id; })
-       .catch(() => showMsg('No se pudo acceder al GPS.'));
-  } else if (navigator.geolocation) {
+  if (g) {
+    // El permiso se pide ANTES de arrancar el seguimiento. Si watchPosition
+    // arranca sin permiso, no falla: se queda callado para siempre, y en
+    // pantalla eso se ve como "Buscando señal de GPS" eterno.
+    if (await pedirPermisoUbicacion() === 'denied') {
+      navSinPermiso();
+      return;
+    }
+    try {
+      NAV.watchId = await g.watchPosition(opts, (pos, err) => {
+        if (pos) onPosicion(pos);
+        else if (err) $('navMsg').textContent = 'Sin señal de GPS. Salí a cielo abierto.';
+      });
+    } catch (_) {
+      navSinPermiso();
+    }
+    return;
+  }
+
+  if (navigator.geolocation) {
     NAV.watchId = navigator.geolocation.watchPosition(
       onPosicion,
-      e => { if (e.code === 1) showMsg('Sin permiso de ubicación.'); },
+      e => { if (e.code === 1) navSinPermiso(); },
       opts);
   } else {
-    showMsg('Este dispositivo no expone el GPS.');
+    $('navMsg').textContent = 'Este dispositivo no expone el GPS.';
   }
+}
+
+/** Estado explícito cuando no hay permiso, con botón para resolverlo. */
+function navSinPermiso() {
+  $('navIcono').textContent = '⚠';
+  $('navDist').textContent = 'Sin GPS';
+  $('navMsg').textContent = 'La app necesita permiso de ubicación para navegar.';
+  $('navMedio').innerHTML =
+    '<div class="chip recalc" id="chipPermiso">Tocá acá para dar permiso</div>';
+  const chip = $('chipPermiso');
+  if (chip) chip.onclick = async () => {
+    if (await pedirPermisoUbicacion() === 'granted') {
+      $('navMedio').innerHTML = '';
+      $('navMsg').textContent = 'Buscando señal de GPS…';
+      seguirPosicion();
+    } else {
+      $('navMsg').textContent =
+        'Permiso denegado. Activalo en Ajustes de Android → Apps → Luz Verde → Permisos.';
+    }
+  };
 }
 
 /* -- cada posición nueva -------------------------------------------------- */
