@@ -565,7 +565,7 @@ test('sin ninguna voz lo dice en vez de fallar callado', () => {
 
 test('las voces se muestran con nombre, no con codigo de pais', () => {
   const f = js.match(/function pintarSelectorVoz\(\)[\s\S]*?\n\}/)[0];
-  assert.ok(/nombrarVoces\(vocesEs\)/.test(f), 'el selector no usa los nombres');
+  assert.ok(/nombrarVoces\(ofrecidas\)/.test(f), 'el selector no usa los nombres');
   assert.ok(!/Estados Unidos|Argentina/.test(f),
     'un codigo de pais no le dice nada a nadie; un nombre se recuerda');
 });
@@ -646,6 +646,126 @@ test('el cartel de "no hay voces" si se muestra', () => {
   assert.ok(corte > 0, 'no esta el caso sin voces');
   assert.ok(/ayuda\.style\.display = ''/.test(f.slice(corte, corte + 300)),
     'el cartel queda escondido justo cuando hace falta');
+});
+
+console.log('\nIconos, tema y peajes');
+
+test('ningun recurso de la app cuelga de una ruta relativa', () => {
+  // Dentro del APK y abierto desde WhatsApp con content://, "../assets/x.png"
+  // no resuelve y queda el cuadrito roto. Pasó con el icono de los ajustes.
+  const malos = [...html.matchAll(/(?:src|href)="(\.\.?\/[^"]*)"/g)].map(m => m[1]);
+  assert.deepStrictEqual(malos, [], 'rutas relativas: ' + malos.join(', '));
+});
+
+test('el icono de la marca va dibujado en el HTML', () => {
+  assert.ok(/<svg class="marcaIcono"/.test(html), 'no está el SVG del icono');
+});
+
+test('el modo oscuro cambia toda la paleta, no solo el mapa', () => {
+  const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+  const b = css.match(/body\.tema-oscuro\{([\s\S]*?)\}/);
+  assert.ok(b, 'no existe el bloque body.tema-oscuro');
+  for (const v of ['--bg', '--card', '--card2', '--line', '--txt', '--dim',
+                   '--flotante', '--tenue', '--suave', '--mapa-fondo']) {
+    assert.ok(b[1].includes(v + ':'), 'falta redefinir ' + v);
+  }
+});
+
+test('no quedan colores escritos a mano donde hay variable', () => {
+  // Se miran las reglas, no las declaraciones: en :root y en body.tema-oscuro
+  // los colores literales son justamente el punto.
+  const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+  const reglas = css
+    .replace(/:root\{[\s\S]*?\n\}/, '')
+    .replace(/body\.tema-oscuro\{[\s\S]*?\n\}/, '');
+  for (const c of ['#9ab3a5', '#8aa697', '#e7f6ec', '#c3d8ca', 'rgba(255,255,255,.96)']) {
+    assert.ok(!reglas.includes(c), c + ' sigue fijo: en oscuro no va a cambiar');
+  }
+});
+
+test('el mapa oscuro levanta los negros', () => {
+  const f = html.match(/\.tema-oscuro \.leaflet-tile\{\s*filter:([^;]*);/)[1];
+  // brightness no alcanza: negro por cualquier factor sigue siendo negro.
+  // Hace falta contrast<1, que suma un offset y despega el fondo del negro.
+  const c = parseFloat((f.match(/contrast\(([\d.]+)\)/) || [])[1]);
+  assert.ok(c > 0 && c < 1, 'sin contrast<1 el fondo sigue casi negro');
+  assert.ok(/hue-rotate\(\d+deg\)/.test(f), 'sin hue-rotate no hay azul');
+});
+
+test('Overpass tambien pide las cabinas de peaje', () => {
+  assert.ok(/"barrier"="toll_booth"/.test(js), 'no se consultan las cabinas');
+  assert.ok(/tramosPeaje/.test(js), 'no se guarda el tramo tarifado de TomTom');
+});
+
+test('las cabinas se descartan si mientras tanto cambio la ruta', () => {
+  const f = js.match(/function asegurarPeajes\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/if \(clave !== S\.peajesClave\) return;/.test(f),
+    'una respuesta vieja pintaria peajes de otro trayecto');
+});
+
+{
+  const fuente = js.match(/(function tiempoHasta[\s\S]*?\n\})/)[1];
+  const conVel = v => new Function('NAV', fuente + '\nreturn tiempoHasta;')({ velRef: v });
+  const t = conVel(11);            // ~40 km/h
+
+  test('el tiempo parcial usa la velocidad de referencia', () => {
+    assert.strictEqual(t(11 * 60), '1 min');
+    assert.strictEqual(t(11 * 60 * 8), '8 min');
+  });
+
+  test('el tiempo parcial se calla cuando no aporta', () => {
+    assert.strictEqual(t(80), null, 'a 80 m no hace falta un tiempo');
+    assert.strictEqual(t(0), null);
+    assert.strictEqual(t(NaN), null);
+  });
+
+  test('con velocidad cero no devuelve infinito', () => {
+    // Parado en un semaforo la instantanea es 0. Si el calculo la usara, el
+    // cartel diria "Infinity min" justo cuando lo estas mirando.
+    assert.strictEqual(conVel(0)(5000), null);
+  });
+
+  test('pasa a horas en trayectos largos', () => {
+    assert.strictEqual(t(11 * 60 * 95), '1 h 35');
+  });
+}
+
+test('los tres vehiculos existen y giran sobre el mismo punto', () => {
+  const b = js.match(/const VEHICULOS = \[([\s\S]*?)\n\];/)[1];
+  const ids = [...b.matchAll(/^  \['(\w+)'/gm)].map(m => m[1]);
+  assert.deepStrictEqual(ids, ['flecha', 'auto', 'camioneta']);
+  // Mismo viewBox para los tres: con otro, al girar describiria una orbita
+  // alrededor del ancla en vez de girar sobre si mismo.
+  const cajas = [...b.matchAll(/viewBox="([^"]+)"/g)].map(m => m[1]);
+  assert.strictEqual(cajas.length, 3);
+  assert.ok(cajas.every(c => c === cajas[0]), 'viewBox distintos: ' + cajas);
+  assert.ok(/iconAnchor: \[38, 44\]/.test(js), 'el ancla no coincide con el dibujo');
+});
+
+test('el vehiculo elegido se ve sin reiniciar el viaje', () => {
+  const i = js.indexOf('function pintarVehiculoAjustes');
+  const f = js.slice(i, js.indexOf('function pintarEvitarAjustes', i));
+  assert.ok(/NAV\.marker\.setIcon\(iconoVehiculo\(\)\)/.test(f),
+    'habria que salir a la calle para saber como quedo');
+  assert.ok(/localStorage\.setItem\('tt_vehiculo'/.test(f), 'no se recuerda la eleccion');
+});
+
+test('siempre se puede elegir alguna voz', () => {
+  // En el WebView de Android getVoices() devuelve vacio aunque speak() ande.
+  // Sin este respaldo la app decia "No hay voces disponibles" en un telefono
+  // que hablaba perfecto.
+  const f = js.match(/function vocesOfrecidas\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/vocesEs\.length \? vocesEs : \[VOZ_SISTEMA\]/.test(f),
+    'sin voces enumerables la app se queda muda');
+});
+
+test('nada se usa antes de declararse', () => {
+  // Ya rompio la app entera dos veces: un `const` declarado mas abajo del
+  // punto donde corre el arranque tira ReferenceError y mata el script.
+  const decl = js.indexOf('const VOZ_FEM');
+  const uso = js.indexOf('cargarVoces();');
+  assert.ok(decl > 0 && uso > 0);
+  assert.ok(decl < uso, 'VOZ_FEM se declara despues de que cargarVoces() lo necesito');
 });
 
 test('no hay bloques de codigo duplicados', () => {

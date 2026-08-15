@@ -1,6 +1,6 @@
-/* OBSOLETO — se puede borrar.
+/* Este archivo ya no se usa: su contenido vive dentro de index.html.
  *
- * El motor de navegacion ahora va embebido dentro de www/index.html, para que
- * la app siga siendo un unico archivo que funciona abierto desde cualquier
- * lado. Este archivo quedo vacio a proposito; nada lo referencia.
+ * Estaba separado y se rompía al abrir la app desde WhatsApp (content://),
+ * donde un <script src="nav.js"> relativo no resuelve y la navegación
+ * desaparecía sin ningún error visible. Se puede borrar del repositorio.
  */

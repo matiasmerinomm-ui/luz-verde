@@ -22,7 +22,32 @@
   --bg:#eef5f0; --card:#ffffff; --card2:#f3f8f5; --line:#d5e5da;
   --txt:#0f2318; --dim:#5d7d6b; --accent:#15873d;
   --ok:#22c55e; --warn:#eab308; --bad:#f97316; --crit:#ef4444;
+  /* Los botones que flotan sobre el mapa, el gris de los textos secundarios y
+     los avisos: estaban escritos a mano y por eso el modo oscuro solo cambiaba
+     el mapa. Como variables, cambian con el resto. */
+  --flotante:rgba(255,255,255,.96); --tenue:#9ab3a5; --grab:#c3d8ca;
+  --suave:#e7f6ec; --suave-l:#b7e0c5; --suave-t:#14562c;
+  --peaje-bg:#fdf3d8; --peaje-l:#e6cf90; --peaje-t:#7a5c10;
+  --mapa-fondo:#e8efe9;
   --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
+}
+
+/* ---------------------------------------------------------------------------
+   Modo oscuro — toda la app, no solo el mapa
+   ---------------------------------------------------------------------------
+   Azul pizarra en vez de negro. El negro puro de noche produce halo alrededor
+   del texto en pantallas OLED y cansa más que un gris azulado; además, al lado
+   del parabrisas, un panel negro se lee como un agujero. Este azul mantiene el
+   verde de marca legible encima.
+   ------------------------------------------------------------------------ */
+body.tema-oscuro{
+  --bg:#141f28; --card:#1b2a35; --card2:#22333f; --line:#2f4657;
+  --txt:#e8f1f6; --dim:#9db4c2;
+  --verde:#16a34a; --verde-os:#22c55e; --accent:#16a34a;
+  --flotante:rgba(27,42,53,.96); --tenue:#7d95a3; --grab:#3a5163;
+  --suave:#173629; --suave-l:#2b5a41; --suave-t:#8fe3b0;
+  --peaje-bg:#3a3320; --peaje-l:#5f5433; --peaje-t:#e8cf8e;
+  --mapa-fondo:#242f3e;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;margin:0;overscroll-behavior:none}
@@ -58,7 +83,7 @@ button,input{font-family:inherit;font-size:16px}
 .dot{width:9px;height:9px;border-radius:50%;flex:none}
 .inputrow input{flex:1;border:0;background:transparent;color:var(--txt);
   padding:13px 0;outline:none;min-width:0}
-.inputrow input::placeholder{color:#9ab3a5}
+.inputrow input::placeholder{color:var(--tenue)}
 .iconbtn{border:0;background:transparent;color:var(--dim);padding:8px;font-size:17px;flex:none}
 #sug{position:absolute;left:12px;right:12px;background:var(--card);
   border:1px solid var(--line);border-radius:12px;overflow:hidden;z-index:1200;
@@ -92,31 +117,39 @@ button,input{font-family:inherit;font-size:16px}
 .tema-claro .leaflet-tile{
   filter:saturate(.62) hue-rotate(-12deg) brightness(1.03) contrast(.94);
 }
+/* Las teselas dark_all de CARTO son casi negras. Este filtro las lleva al azul
+   pizarra del modo oscuro de Google Maps, que es lo que se pidió.
+
+   Los números no son a ojo: contrast(.75) levanta los negros del fondo (un
+   brightness no sirve, negro por cualquier factor sigue siendo negro), sepia
+   tiñe los grises resultantes, hue-rotate lleva ese tinte al azul y saturate
+   lo afirma. Con estos valores el fondo #0e0e0e queda en #272f36 y las calles
+   #2b2b2b en #3b4852 — a un par de puntos del objetivo #242f3e / #38414e. */
 .tema-oscuro .leaflet-tile{
-  filter:saturate(.55) hue-rotate(96deg) brightness(.92) contrast(1.06);
+  filter:contrast(.75) sepia(.40) hue-rotate(165deg) saturate(2.1);
 }
 /* La ruta y los marcadores quedan fuera del filtro: si se tiñen también,
    el contraste que los hace legibles se pierde. */
 .leaflet-overlay-pane,.leaflet-marker-pane,.leaflet-tooltip-pane{filter:none}
-.leaflet-tooltip{background:#fff;color:var(--txt);border:1px solid var(--line);
+.leaflet-tooltip{background:var(--card);color:var(--txt);border:1px solid var(--line);
   border-radius:8px;font-size:12px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.5)}
 .leaflet-tooltip-top:before{border-top-color:var(--line)}
 
 /* ---------- mapa ---------- */
 #mapwrap{position:relative;flex:1;display:flex;min-height:190px}
-#map{flex:1;background:#e8efe9}
+#map{flex:1;background:var(--mapa-fondo)}
 #btnMenu{position:absolute;top:10px;left:10px;z-index:600;width:46px;height:46px;
-  border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.96);
+  border-radius:14px;border:1px solid var(--line);background:var(--flotante);
   color:var(--txt);font-size:21px;line-height:1;box-shadow:0 4px 14px rgba(15,35,24,.18)}
 body.navegando #btnMenu{display:none}
 #btnTema,#btnVoz{position:absolute;right:10px;z-index:600;width:42px;height:42px;
-  border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.95);
+  border-radius:12px;border:1px solid var(--line);background:var(--flotante);
   color:var(--txt);font-size:19px;line-height:1;box-shadow:0 4px 14px rgba(15,35,24,.18)}
 #btnTema{top:10px}
 #btnVoz{top:60px}
 .leaflet-control-attribution{display:none!important}
 .leaflet-control-attribution a{color:#8b95a6!important}
-.leaflet-bar a{background:#fff!important;color:var(--txt)!important;
+.leaflet-bar a{background:var(--card)!important;color:var(--txt)!important;
   border-color:var(--line)!important}
 
 /* ---------- panel de resultados ---------- */
@@ -124,7 +157,7 @@ body.navegando #btnMenu{display:none}
   animation:subirPanel .3s cubic-bezier(.2,.8,.3,1) both;
   border-radius:18px 18px 0 0;padding:14px 16px calc(var(--safe-bot) + 14px);
   max-height:56vh;overflow-y:auto;z-index:800}
-.grab{width:38px;height:4px;border-radius:3px;background:#c3d8ca;margin:0 auto 12px}
+.grab{width:38px;height:4px;border-radius:3px;background:var(--grab);margin:0 auto 12px}
 .eta{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
 .eta .big{font-size:40px;font-weight:750;letter-spacing:-.035em;line-height:1}
 .eta .unit{font-size:17px;color:var(--dim);font-weight:600}
@@ -138,7 +171,7 @@ body.navegando #btnMenu{display:none}
 
 .alt{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:12px;
   border:1px solid var(--line);margin-top:9px}
-.alt.on{border-color:var(--accent);background:#e7f6ec}
+.alt.on{border-color:var(--accent);background:var(--suave)}
 .alt .stripe{width:4px;height:32px;border-radius:3px;flex:none}
 .alt .txt{flex:1;min-width:0}
 .alt .t1{font-weight:650;font-size:15px}
@@ -160,7 +193,7 @@ body.navegando #btnMenu{display:none}
 .steps li b{color:var(--txt);font-weight:600}
 
 #msg{padding:11px 14px;margin:10px 12px;border-radius:11px;font-size:13.5px;
-  background:#e7f6ec;border:1px solid #b7e0c5;color:#14562c;
+  background:var(--suave);border:1px solid var(--suave-l);color:var(--suave-t);
   animation:subirPanel .25s ease both}
 #hint{padding:6px 2px 10px;color:var(--dim);font-size:14px}
 #hintTexto{text-align:center;font-size:13px;margin:16px 0 0}
@@ -177,7 +210,7 @@ body.navegando #btnMenu{display:none}
 .lug .nom{font-weight:650;font-size:14px}
 .lug .det{font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;max-width:150px}
-.lug.vacia .det{color:#9ab3a5;font-style:italic}
+.lug.vacia .det{color:var(--tenue);font-style:italic}
 .lug.nuevo{align-items:center;justify-content:center;min-width:64px;
   border-style:dashed;color:var(--dim);font-size:22px}
 
@@ -189,14 +222,14 @@ body.navegando #btnMenu{display:none}
 .rec .txt{flex:1;min-width:0}
 .rec .t1{color:var(--txt);font-size:14.5px;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis}
-.rec .borrar{color:#9ab3a5;font-size:15px;padding:4px 6px;flex:none}
+.rec .borrar{color:var(--tenue);font-size:15px;padding:4px 6px;flex:none}
 .sechead{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
   font-weight:600;color:var(--dim);margin:16px 0 2px}
 .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line);
   border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;
   vertical-align:-3px;margin-right:7px}
 @keyframes sp{to{transform:rotate(360deg)}}
-.foot{color:#8aa697;font-size:11px;text-align:center;margin-top:14px;line-height:1.5}
+.foot{color:var(--tenue);font-size:11px;text-align:center;margin-top:14px;line-height:1.5}
 .btn.iniciar{background:var(--verde);color:#fff;margin-top:14px;font-size:17px;
   box-shadow:0 6px 18px rgba(22,163,74,.35);transition:transform .12s}
 .btn.iniciar:active{transform:scale(.97)}
@@ -205,9 +238,13 @@ body.navegando #btnMenu{display:none}
   font-weight:600;margin-top:16px}
 .viapor{color:var(--txt);font-size:14px;margin-top:7px;font-weight:600}
 .tagpeaje{display:inline-block;margin-top:7px;padding:4px 10px;border-radius:8px;
-  background:#fdf3d8;border:1px solid #e6cf90;color:#7a5c10;font-size:12px;font-weight:600}
+  background:var(--peaje-bg);border:1px solid var(--peaje-l);color:var(--peaje-t);font-size:12px;font-weight:600}
 .when.evitar button.on{background:var(--bad);border-color:var(--bad);color:#fff}
 #evitarAjustes{flex-wrap:wrap;overflow:visible;margin-top:2px;gap:9px}
+#vehiculoAjustes{margin-top:2px;gap:9px}
+.veh3 button{display:flex;flex-direction:column;align-items:center;gap:2px;
+  border-radius:14px;padding:9px 14px}
+.veh3 svg{width:36px;height:36px;display:block}
 #temaAjustes{margin-top:2px}
 #ajustes .btn{margin-top:20px}
 #ajustes .btn + .btn{margin-top:12px}
@@ -240,9 +277,10 @@ select.field{appearance:none;background-image:none}
 .ayuda{color:var(--dim);font-size:12px;margin:12px 0 24px;line-height:1.6}
 /* Los créditos no son decorativos: la licencia de OpenStreetMap obliga a
    atribuir. Se pueden mover fuera del mapa, pero no eliminar. */
-.creditos{color:#8aa697;font-size:10.5px;line-height:1.7;margin:30px 0 0;
+.marcaIcono{width:38px;height:38px;flex:none;border-radius:11px}
+.creditos{color:var(--tenue);font-size:10.5px;line-height:1.7;margin:30px 0 0;
   text-align:center;border-top:1px solid var(--line);padding-top:18px}
-.creditos a{color:#8aa697;text-decoration:underline}
+.creditos a{color:var(--tenue);text-decoration:underline}
 
 /* ---------- modo navegación ---------- */
 body.navegando #top,
@@ -278,6 +316,13 @@ body.navegando #btnVoz{top:auto;bottom:150px}
 #navMedio{margin:0 8px;display:flex;flex-direction:column;gap:7px;align-items:flex-start}
 .chip{padding:9px 14px;border-radius:12px;font-size:13.5px;font-weight:650;
   box-shadow:0 6px 20px rgba(0,0,0,.45);display:flex;align-items:center;gap:8px}
+.pjm span{display:block;width:24px;height:24px;border-radius:50%;
+  background:#eab308;color:#3a2c04;border:2px solid #fff;
+  font:700 13px/22px system-ui,sans-serif;text-align:center;
+  box-shadow:0 2px 7px rgba(0,0,0,.4)}
+#navDist small{font-size:15px;font-weight:600;color:#8fd3a8;margin-left:8px;
+  letter-spacing:0}
+.chip.peaje{background:#3a3320;border:1px solid #6b5c2c;color:#f3dd9e}
 .chip.camara{background:#3a1d1d;border:1px solid #7d3a35;color:#ffc7ba}
 .chip.recalc{background:#2a2410;border:1px solid #6d5a1e;color:#f0d489}
 .chip .lim{background:#fff;color:#b3261e;border-radius:50%;width:26px;height:26px;
@@ -406,7 +451,15 @@ body.navegando #btnVoz{top:auto;bottom:150px}
 <div id="ajustes" class="hidden">
   <div class="hoja">
     <div class="menuCab">
-      <img src="../assets/icon.png" alt="">
+      <!-- SVG acá adentro y no <img src="...">: la ruta relativa salía de www/
+           y dentro del APK, o abierto desde WhatsApp con content://, no
+           resuelve. Se veía el cuadrito roto. Inline no puede fallar. -->
+      <svg class="marcaIcono" viewBox="0 0 64 64" aria-hidden="true">
+        <rect x="18" y="4" width="28" height="56" rx="13" fill="#15873d"/>
+        <circle cx="32" cy="18" r="7.5" fill="#86efac"/>
+        <circle cx="32" cy="43" r="10" fill="#ffffff"/>
+        <path d="M32 35.5 L25 49 L32 45.6 L39 49 Z" fill="#15873d"/>
+      </svg>
       <div><b>Luz Verde</b><span id="sello">Ajustes</span></div>
     </div>
 
@@ -426,6 +479,10 @@ body.navegando #btnVoz{top:auto;bottom:150px}
     <h2 class="hojaTit">Mapa</h2>
     <div class="when" id="temaAjustes"></div>
     <p class="ayuda">En automático usa el mapa claro de día y el oscuro de noche.</p>
+
+    <h2 class="hojaTit">Vehículo</h2>
+    <div class="when veh3" id="vehiculoAjustes"></div>
+    <p class="ayuda">Así te ves a vos mismo en el mapa mientras manejás.</p>
 
     <h2 class="hojaTit">Preferencias de ruta</h2>
     <div class="when evitar" id="evitarAjustes"></div>
@@ -688,7 +745,7 @@ function excesoRelevante(velKmh, limite, tolerancia = 7) {
 /** Consulta Overpass. Devuelve [] ante cualquier problema: nunca rompe el viaje. */
 async function buscarCamaras(puntos, fetchImpl) {
   const f = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
-  if (!f) return { camaras: [], limites: [] };
+  if (!f) return { camaras: [], limites: [], peajes: [] };
 
   const lats = puntos.map(p => p[0]), lons = puntos.map(p => p[1]);
   const bbox = [
@@ -698,10 +755,15 @@ async function buscarCamaras(puntos, fetchImpl) {
 
   // Una sola consulta para camaras y limites: son el mismo viaje y Overpass es
   // un servicio comunitario, no conviene pegarle dos veces por ruta.
+  // Las cabinas van en la misma consulta. TomTom informa que la ruta tiene
+  // peaje, pero no dónde: da el tramo tarifado completo, que puede ser de
+  // kilómetros. La cabina, que es lo que hay que ver venir, está mapeada en
+  // OpenStreetMap como barrier=toll_booth.
   const q = `[out:json][timeout:25];
 (
   node["highway"="speed_camera"](${bbox});
   node["enforcement"="maxspeed"](${bbox});
+  node["barrier"="toll_booth"](${bbox});
   way["maxspeed"]["highway"~"^(motorway|trunk|primary|secondary|tertiary)$"](${bbox});
 );
 out geom;`;
@@ -712,14 +774,16 @@ out geom;`;
       body: 'data=' + encodeURIComponent(q),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
-    if (!r.ok) return { camaras: [], limites: [] };
+    if (!r.ok) return { camaras: [], limites: [], peajes: [] };
     const d = await r.json();
-    const camaras = [], limites = [];
+    const camaras = [], limites = [], peajes = [];
     for (const e of (d.elements || [])) {
       const tags = e.tags || {};
       const vel = parseInt(tags.maxspeed || tags['maxspeed:forward'] || '', 10) || null;
 
-      if (e.type === 'node' && e.lat) {
+      if (e.type === 'node' && e.lat && tags.barrier === 'toll_booth') {
+        peajes.push({ lat: e.lat, lon: e.lon, nombre: tags.name || '' });
+      } else if (e.type === 'node' && e.lat) {
         camaras.push({ lat: e.lat, lon: e.lon, limite: vel });
       } else if (e.type === 'way' && vel && Array.isArray(e.geometry)) {
         // Un punto cada tantos vertices alcanza: el limite no cambia en 30 m.
@@ -728,9 +792,9 @@ out geom;`;
         }
       }
     }
-    return { camaras, limites };
+    return { camaras, limites, peajes };
   } catch (_) {
-    return { camaras: [], limites: [] };
+    return { camaras: [], limites: [], peajes: [] };
   }
 }
 
@@ -849,7 +913,7 @@ const KEY_EMBEBIDA = '';
 /* Sello de esta versión. Sirve para saber de un vistazo si el teléfono está
    corriendo lo último que subiste o una copia vieja del caché — que es
    imposible de distinguir a ojo y hace perder mucho tiempo. */
-const VERSION_APP = 'lv-0815-0d3f77';
+const VERSION_APP = 'lv-0815-6ca1e1';
 console.log('Luz Verde ' + VERSION_APP);
 
 /**
@@ -930,6 +994,8 @@ const S = {
   markers: [],
   timer: null,
   busy: false,
+  peajes: [],          // cabinas sobre la ruta, traídas de OpenStreetMap
+  peajesClave: '',     // qué ruta corresponden, para no pedirlas dos veces
 };
 
 const $ = id => document.getElementById(id);
@@ -956,7 +1022,7 @@ const TEMAS = {
   },
   oscuro: {
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    ruta: '#22c55e', alterna: '#5c6f63', fondo: '#0f1a15', icono: '☾',
+    ruta: '#22c55e', alterna: '#7d8fa5', fondo: '#242f3e', icono: '☾',
   },
 };
 
@@ -984,9 +1050,12 @@ function aplicarTema() {
   }).addTo(map);
   capaMapa.setZIndex(0);
 
-  document.getElementById('map').style.background = t.fondo;
   document.body.classList.toggle('tema-claro', temaActual === 'claro');
   document.body.classList.toggle('tema-oscuro', temaActual === 'oscuro');
+  // La barra de estado de Android queda del color del fondo. Si no, arriba de
+  // una app oscura sigue habiendo una franja clara y se ve mal terminado.
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', temaActual === 'claro' ? '#eef5f0' : '#141f28');
   $('btnTema').textContent = preferenciaTema === 'auto' ? t.icono
     : (temaActual === 'claro' ? '☀' : '☾');
   $('btnTema').style.opacity = preferenciaTema === 'auto' ? '.75' : '1';
@@ -1156,6 +1225,9 @@ function parseRoute(r) {
     // TomTom no informa el precio del peaje en el plan gratuito, pero sí marca
     // los tramos donde hay uno. Saber que hay peaje ya cambia la decisión.
     peaje: (r.sections || []).some(x => x.sectionType === 'TOLL_ROAD'),
+    // El tramo tarifado, para poder resaltarlo. Es lo único que da TomTom
+    // sobre peajes en el plan gratuito: ni precio ni ubicación de cabina.
+    tramosPeaje: (r.sections || []).filter(x => x.sectionType === 'TOLL_ROAD'),
     // Los pasos alimentan tanto la lista escrita como la guía por voz, así que
     // se conservan la maniobra y el punto, no solo el texto.
     steps: ((r.guidance && r.guidance.instructions) || [])
@@ -1284,6 +1356,27 @@ function draw() {
       { direction: 'top', opacity: .95 }));
   });
 
+  // Tramo con peaje: rayado amarillo encima de la ruta. Saber que "hay peaje"
+  // no sirve de mucho si no se ve dónde; esto es lo que informa TomTom.
+  (r.tramosPeaje || []).forEach(sec => {
+    const seg = r.points.slice(sec.startPointIndex, sec.endPointIndex + 1);
+    if (seg.length < 2) return;
+    S.layers.push(L.polyline(seg, {
+      color: '#eab308', weight: 7, opacity: .95, dashArray: '2 13', lineCap: 'round',
+    }).addTo(map).bindTooltip('Tramo con peaje', { direction: 'top', opacity: .95 }));
+  });
+
+  // Y la cabina en sí, que es el punto donde frenás. Viene de OpenStreetMap,
+  // llega más tarde que la ruta y por eso se dibuja cuando está.
+  S.peajes.forEach(pj => {
+    S.markers.push(L.marker([pj.lat, pj.lon], {
+      zIndexOffset: 700,
+      icon: L.divIcon({ className: 'pjm', html: '<span>$</span>',
+                        iconSize: [26, 26], iconAnchor: [13, 13] }),
+    }).addTo(map).bindTooltip(pj.nombre || 'Peaje',
+                              { direction: 'top', opacity: .95 }));
+  });
+
   // Etiqueta de tiempo sobre cada ruta, como Waze. Se ancla a un punto lejos
   // del inicio para que las burbujas de las alternativas no se pisen entre sí.
   S.routes.forEach((ruta, i) => {
@@ -1328,6 +1421,30 @@ function draw() {
 function refresh() {
   render();
   draw();
+  asegurarPeajes();
+}
+
+/**
+ * Trae las cabinas de peaje de la ruta elegida, una sola vez por ruta.
+ *
+ * La clave identifica la ruta: si mientras Overpass responde el usuario cambia
+ * de alternativa o de destino, la respuesta vieja se descarta en vez de pintar
+ * cabinas de un trayecto que ya no es el que está en pantalla.
+ */
+function asegurarPeajes() {
+  const r = S.routes[S.picked];
+  if (!r || !r.peaje) { S.peajes = []; S.peajesClave = ''; return; }
+
+  const clave = `${r.meters}|${r.points.length}|${S.picked}`;
+  if (clave === S.peajesClave) return;
+  S.peajesClave = clave;
+  S.peajes = [];
+
+  buscarCamaras(r.points).then(res => {
+    if (clave !== S.peajesClave) return;
+    S.peajes = camarasSobreRuta(res.peajes || [], r.points, acumulados(r.points), 150);
+    if (S.peajes.length) draw();
+  });
 }
 
 /* ============================================================
@@ -1714,25 +1831,77 @@ pintarRecientes();
 const NAV = {
   on: false, watchId: null,
   puntos: [], acc: [], total: 0, pasos: [], idxTramo: 0,
-  camaras: [], limites: [], avisados: {}, desvio: {},
+  camaras: [], limites: [], peajes: [], avisados: {}, desvio: {},
   ultimoAvisoExceso: 0, limitePintado: null,
   marker: null, wake: null, velKmh: 0, ultimaVoz: 0,
   rumboPintado: 0, zoomPintado: null,
+  /* Velocidad de referencia en m/s para estimar cuánto falta hasta la próxima
+     maniobra. Arranca con la media de la ruta y se va corrigiendo con lo que
+     realmente vas manejando. No se usa la velocidad instantánea: parado en un
+     semáforo es cero y el cálculo se iría al infinito. */
+  velRef: 11,
 };
 
-/* Marcador del vehículo: disco verde de marca, aro blanco para despegarlo
-   del mapa, y un cono que muestra hacia dónde apunta. */
-const MARCADOR_SVG = `<div class="veh"><svg viewBox="0 0 76 76">
-  <defs><linearGradient id="cono" x1="0" y1="1" x2="0" y2="0">
+/* ---------------------------------------------------------------------------
+   Marcadores del vehículo
+   ---------------------------------------------------------------------------
+   Los tres van dibujados acá adentro y no como archivos de imagen: dentro del
+   APK las rutas relativas no resuelven, y un marcador que no carga deja al
+   conductor sin saber dónde está.
+
+   Todos miran hacia arriba y giran desde el mismo punto (38, 44), que es el
+   ancla del marcador. Si uno tuviera otro centro, al girar describiría una
+   órbita alrededor del vehículo en vez de girar sobre sí mismo.
+   ------------------------------------------------------------------------ */
+const CONO = `<defs><linearGradient id="cono" x1="0" y1="1" x2="0" y2="0">
     <stop offset="0%" stop-color="#22c55e" stop-opacity=".45"/>
     <stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>
   </linearGradient></defs>
-  <path d="M38 44 L9 4 L67 4 Z" fill="url(#cono)"/>
-  <circle cx="38" cy="44" r="19" fill="#0b1310" opacity=".35"/>
-  <circle cx="38" cy="44" r="16.5" fill="#ffffff"/>
-  <circle cx="38" cy="44" r="13" fill="#16a34a"/>
-  <path d="M38 35 L31 49 L38 45.6 L45 49 Z" fill="#ffffff"/>
-</svg></div>`;
+  <path d="M38 44 L9 4 L67 4 Z" fill="url(#cono)"/>`;
+
+const VEHICULOS = [
+  ['flecha', 'Flecha', `<svg viewBox="0 0 76 76">${CONO}
+    <circle cx="38" cy="44" r="19" fill="#0b1310" opacity=".35"/>
+    <circle cx="38" cy="44" r="16.5" fill="#ffffff"/>
+    <circle cx="38" cy="44" r="13" fill="#16a34a"/>
+    <path d="M38 35 L31 49 L38 45.6 L45 49 Z" fill="#ffffff"/>
+  </svg>`],
+
+  ['auto', 'Auto', `<svg viewBox="0 0 76 76">${CONO}
+    <rect x="24.6" y="37" width="2.8" height="6.5" rx="1.3" fill="#0b1310" opacity=".6"/>
+    <rect x="48.6" y="37" width="2.8" height="6.5" rx="1.3" fill="#0b1310" opacity=".6"/>
+    <rect x="24.6" y="48.5" width="2.8" height="6.5" rx="1.3" fill="#0b1310" opacity=".6"/>
+    <rect x="48.6" y="48.5" width="2.8" height="6.5" rx="1.3" fill="#0b1310" opacity=".6"/>
+    <rect x="26" y="30" width="24" height="32" rx="9" fill="#0b1310" opacity=".3"/>
+    <rect x="25.5" y="28" width="25" height="32" rx="9.5" fill="#ffffff"/>
+    <rect x="27.5" y="30" width="21" height="28" rx="8" fill="#16a34a"/>
+    <path d="M31.2 35.6 h13.6 l-1.6 4.6 h-10.4 Z" fill="#d9f7e5" opacity=".95"/>
+    <rect x="31.6" y="47.5" width="12.8" height="4.2" rx="1.8" fill="#0c5c2c" opacity=".6"/>
+  </svg>`],
+
+  ['camioneta', 'Camioneta', `<svg viewBox="0 0 76 76">${CONO}
+    <rect x="22.4" y="33.5" width="3.2" height="7.5" rx="1.5" fill="#0b1310" opacity=".6"/>
+    <rect x="50.4" y="33.5" width="3.2" height="7.5" rx="1.5" fill="#0b1310" opacity=".6"/>
+    <rect x="22.4" y="48.5" width="3.2" height="7.5" rx="1.5" fill="#0b1310" opacity=".6"/>
+    <rect x="50.4" y="48.5" width="3.2" height="7.5" rx="1.5" fill="#0b1310" opacity=".6"/>
+    <rect x="24" y="27" width="28" height="38" rx="7" fill="#0b1310" opacity=".3"/>
+    <rect x="23.5" y="25" width="29" height="38" rx="7.5" fill="#ffffff"/>
+    <rect x="25.5" y="27" width="25" height="34" rx="6" fill="#16a34a"/>
+    <path d="M29.6 31.8 h16.8 l-1.8 5 h-13.2 Z" fill="#d9f7e5" opacity=".95"/>
+    <rect x="29.5" y="43.5" width="17" height="14.5" rx="2.4" fill="#0c5c2c" opacity=".55"/>
+  </svg>`],
+];
+
+let vehiculo = localStorage.getItem('tt_vehiculo') || 'flecha';
+
+function svgVehiculo(id) {
+  const v = VEHICULOS.find(x => x[0] === (id || vehiculo)) || VEHICULOS[0];
+  return v[2];
+}
+function iconoVehiculo() {
+  return L.divIcon({ className: 'vehwrap', iconSize: [76, 76], iconAnchor: [38, 44],
+                     html: `<div class="veh">${svgVehiculo()}</div>` });
+}
 
 /* ============================================================
    Voz propia — banco de frases grabadas
@@ -1812,52 +1981,6 @@ async function cargarBancoVoz() {
 }
 cargarBancoVoz();
 
-/* -- voz ------------------------------------------------------------------ */
-
-let vozEs = null;
-let vocesEs = [];
-let vozElegida = localStorage.getItem('tt_vozNombre') || '';
-let velocidadVoz = parseFloat(localStorage.getItem('tt_vozVel')) || 1.05;
-
-/**
- * Junta las voces en español instaladas en el teléfono.
- *
- * La app no puede fabricar voces: usa las del sistema. Por eso lo único
- * honesto es dejar elegir entre las que hay. Las rioplatenses van primero
- * porque son las que menos chocan escuchándolas en Buenos Aires.
- */
-function cargarVoces() {
-  const vs = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
-  // La de Estados Unidos va primera a propósito: en la mayoría de los Android
-  // es la de mejor síntesis del motor de Google, y suena más natural que la
-  // rioplatense aunque el acento sea menos nuestro. Es la que queda por defecto.
-  const peso = v => (/es[-_]US/i.test(v.lang) ? 0
-                   : /es[-_]AR/i.test(v.lang) ? 1
-                   : /es[-_](UY|CL|419|MX)/i.test(v.lang) ? 2 : 3);
-  // Android suele exponer la misma voz varias veces (una por motor instalado).
-  // Sin deduplicar, el selector muestra "Español (Argentina)" tres veces y
-  // parece roto.
-  const vistas = new Set();
-  vocesEs = vs
-    .filter(v => /^es/i.test(v.lang))
-    .filter(v => {
-      const clave = (v.name + '|' + v.lang).toLowerCase();
-      if (vistas.has(clave)) return false;
-      vistas.add(clave);
-      return true;
-    })
-    .sort((a, b) => peso(a) - peso(b));
-
-  vozEs = vocesEs.find(v => v.name === vozElegida) || vocesEs[0] || null;
-  pintarSelectorVoz();
-}
-if ('speechSynthesis' in window) {
-  cargarVoces();
-  // En Android las voces llegan asincrónicas: sin este evento, la primera
-  // lectura devuelve una lista vacía y quedaría siempre la voz por defecto.
-  speechSynthesis.onvoiceschanged = cargarVoces;
-}
-
 /* Nombres propios en vez de "Voz 2 · Estados Unidos": un nombre se recuerda y
    se elige, un código de país no le dice nada a nadie.
 
@@ -1903,6 +2026,73 @@ function nombrarVoces(vs) {
   });
 }
 
+/* -- voz ------------------------------------------------------------------ */
+
+let vozEs = null;
+let vocesEs = [];
+let vozElegida = localStorage.getItem('tt_vozNombre') || '';
+let velocidadVoz = parseFloat(localStorage.getItem('tt_vozVel')) || 1.05;
+
+/**
+ * Junta las voces en español instaladas en el teléfono.
+ *
+ * La app no puede fabricar voces: usa las del sistema. Por eso lo único
+ * honesto es dejar elegir entre las que hay. Las rioplatenses van primero
+ * porque son las que menos chocan escuchándolas en Buenos Aires.
+ */
+/**
+ * La voz del sistema, sin elegir ninguna en particular.
+ *
+ * El WebView de Android casi nunca deja enumerar las voces: getVoices()
+ * devuelve una lista vacía aunque speak() funcione perfecto, porque el
+ * WebView no expone el catálogo del motor de texto a voz. Sin esto la app
+ * mostraba "No hay voces disponibles" en un teléfono que hablaba bien.
+ *
+ * Entonces siempre hay una opción más: dejar que Android use la que tenga
+ * configurada. No se puede elegir cuál es, pero suena.
+ */
+const VOZ_SISTEMA = { name: '', sistema: true };
+
+function cargarVoces() {
+  const vs = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+  // La de Estados Unidos va primera a propósito: en la mayoría de los Android
+  // es la de mejor síntesis del motor de Google, y suena más natural que la
+  // rioplatense aunque el acento sea menos nuestro. Es la que queda por defecto.
+  const peso = v => (/es[-_]US/i.test(v.lang) ? 0
+                   : /es[-_]AR/i.test(v.lang) ? 1
+                   : /es[-_](UY|CL|419|MX)/i.test(v.lang) ? 2 : 3);
+  // Android suele exponer la misma voz varias veces (una por motor instalado).
+  // Sin deduplicar, el selector muestra "Español (Argentina)" tres veces y
+  // parece roto.
+  const vistas = new Set();
+  vocesEs = vs
+    .filter(v => /^es/i.test(v.lang))
+    .filter(v => {
+      const clave = (v.name + '|' + v.lang).toLowerCase();
+      if (vistas.has(clave)) return false;
+      vistas.add(clave);
+      return true;
+    })
+    .sort((a, b) => peso(a) - peso(b));
+
+  vozEs = vocesEs.find(v => v.name === vozElegida) || vocesEs[0] || null;
+  pintarSelectorVoz();
+}
+
+/** Lo que se ofrece para elegir: las voces que hayan aparecido, más la del
+ *  sistema, que existe siempre que el teléfono sepa hablar. */
+function vocesOfrecidas() {
+  if (!('speechSynthesis' in window)) return [];
+  return vocesEs.length ? vocesEs : [VOZ_SISTEMA];
+}
+if ('speechSynthesis' in window) {
+  cargarVoces();
+  // En Android las voces llegan asincrónicas: sin este evento, la primera
+  // lectura devuelve una lista vacía y quedaría siempre la voz por defecto.
+  speechSynthesis.onvoiceschanged = cargarVoces;
+}
+
+
 function pintarSelectorVoz() {
   const sel = $('selVoz'), ayuda = $('ayudaVoz');
   if (!sel) return;
@@ -1915,20 +2105,22 @@ function pintarSelectorVoz() {
       `<option value="p:${pq.id}" ${paqueteVoz === pq.id ? 'selected' : ''}>` +
       `${pq.nombre}</option>`).join('') + '</optgroup>';
   }
-  if (vocesEs.length) {
-    const nombres = nombrarVoces(vocesEs);
-    html += '<optgroup label="Voces del sistema">' + vocesEs.map((v, i) =>
+  const ofrecidas = vocesOfrecidas();
+  if (ofrecidas.length) {
+    const nombres = nombrarVoces(ofrecidas);
+    html += '<optgroup label="Voces del sistema">' + ofrecidas.map((v, i) =>
       `<option value="s:${v.name}" ` +
-      `${!paqueteVoz && v === vozEs ? 'selected' : ''}>` +
-      `${nombres[i]}</option>`).join('') + '</optgroup>';
+      `${!paqueteVoz && (v === vozEs || v.sistema) ? 'selected' : ''}>` +
+      `${v.sistema ? 'Voz del sistema' : nombres[i]}</option>`).join('') +
+      '</optgroup>';
   }
 
   if (!html) {
     sel.innerHTML = '<option>No hay voces disponibles</option>';
     sel.disabled = true;
     ayuda.style.display = '';
-    ayuda.innerHTML = 'Tu teléfono no tiene voces en español instaladas. '
-      + 'Para sumar una: <b>Ajustes de Android → Administración general → '
+    ayuda.innerHTML = 'Este teléfono no tiene ningún motor de voz. '
+      + 'Para instalarlo: <b>Ajustes de Android → Administración general → '
       + 'Idioma → Texto a voz → motor de Google → Instalar datos de voz</b>.';
     return;
   }
@@ -2042,12 +2234,17 @@ function cargarRutaEnNav(r) {
   // tarda o falla, el viaje arranca igual.
   NAV.camaras = [];
   NAV.limites = [];
+  NAV.peajes = [];
+  // Velocidad de arranque: la media de la ruta que calculó TomTom. Es la mejor
+  // estimación posible antes de haber avanzado un metro.
+  NAV.velRef = r.seconds > 0 ? Math.max(2, r.meters / r.seconds) : 11;
   // Caminando no hay cámaras de velocidad que te importen ni límite que
   // superar: pedir esos datos sería gastar la consulta y molestar con avisos.
   if (!modoActual().transito) return;
   buscarCamaras(r.points).then(res => {
     NAV.camaras = camarasSobreRuta(res.camaras || [], NAV.puntos, NAV.acc);
     NAV.limites = limitesSobreRuta(res.limites || [], NAV.puntos, NAV.acc);
+    NAV.peajes = camarasSobreRuta(res.peajes || [], NAV.puntos, NAV.acc, 150);
   });
 }
 
@@ -2168,6 +2365,9 @@ function onPosicion(pos) {
   if (!NAV.on) return;
   const p = [pos.coords.latitude, pos.coords.longitude];
   NAV.velKmh = Math.max(0, (pos.coords.speed || 0) * 3.6);
+  // Solo se promedian las muestras en movimiento: si contaran los semáforos,
+  // la referencia caería a cero y los tiempos parciales se dispararían.
+  if (NAV.velKmh > 8) NAV.velRef = NAV.velRef * 0.85 + (NAV.velKmh / 3.6) * 0.15;
   const rumboGps = (pos.coords.heading != null && !isNaN(pos.coords.heading))
     ? pos.coords.heading : null;
 
@@ -2199,6 +2399,24 @@ function onPosicion(pos) {
   pintarNav(p, rumboGps, u, hecho, resta);
 }
 
+/**
+ * Cuánto falta, en tiempo, hasta un punto que está a `metros` por delante.
+ *
+ * Usa NAV.velRef, que es la media de la ruta corregida con lo que realmente
+ * venís manejando. La velocidad instantánea no sirve: en un semáforo da cero y
+ * el cartel diría "faltan infinitos minutos" justo cuando lo estás mirando.
+ *
+ * Devuelve un texto corto listo para pantalla, o null si no vale la pena.
+ */
+function tiempoHasta(metros) {
+  if (!isFinite(metros) || metros < 120 || !(NAV.velRef > 0)) return null;
+  const seg = metros / NAV.velRef;
+  if (seg < 45) return null;                 // menos de un minuto: no aporta
+  const min = Math.round(seg / 60);
+  return min < 60 ? min + ' min'
+    : Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0');
+}
+
 function pintarNav(p, rumboGps, u, hecho, resta) {
   // Flecha del vehículo, orientada al rumbo del GPS o, si no lo informa, a la
   // dirección del tramo que está recorriendo.
@@ -2208,8 +2426,7 @@ function pintarNav(p, rumboGps, u, hecho, resta) {
 
   if (!NAV.marker) {
     NAV.marker = L.marker(p, {
-      icon: L.divIcon({ className: 'vehwrap', html: MARCADOR_SVG,
-                        iconSize: [76, 76], iconAnchor: [38, 44] }),
+      icon: iconoVehiculo(),
       zIndexOffset: 1000,
     }).addTo(map);
   }
@@ -2241,7 +2458,11 @@ function pintarNav(p, rumboGps, u, hecho, resta) {
   const dManiobra = paso ? Math.max(0, paso.offset - hecho) : resta;
 
   $('navIcono').textContent = iconoManiobra(paso && paso.maniobra);
-  $('navDist').textContent = dManiobra < 25 ? 'Ahora' : fmtDistanciaCorta(dManiobra);
+  // Distancia y tiempo hasta la próxima indicación, no hasta el final. Son dos
+  // números distintos y el de abajo ya muestra el total.
+  const parcial = tiempoHasta(dManiobra);
+  $('navDist').innerHTML = dManiobra < 25 ? 'Ahora'
+    : fmtDistanciaCorta(dManiobra) + (parcial ? `<small>${parcial}</small>` : '');
   $('navMsg').textContent = paso ? paso.mensaje : 'Seguí derecho';
 
   const sig = NAV.pasos[i + 1];
@@ -2316,6 +2537,17 @@ function chequearVelocidad(hecho) {
 
 function chequearCamaras(hecho) {
   const chips = NAV.excesoChip ? [NAV.excesoChip] : [];
+
+  for (const pj of NAV.peajes) {
+    const d = pj.offset - hecho;
+    if (d <= 0 || d > 900) continue;
+    if (!pj.aviso && d < 700) {
+      pj.aviso = true;
+      hablar('Peaje a ' + Math.round(d / 100) * 100 + ' metros', 'alerta');
+    }
+    chips.push(`<div class="chip peaje">💰 Peaje a ${fmtDistanciaCorta(d)}</div>`);
+  }
+
   for (const c of NAV.camaras) {
     const d = c.offset - hecho;
     if (d > -50 && d < 500) {
@@ -2400,6 +2632,23 @@ function pintarTemaAjustes() {
   });
 }
 
+/* Se elige acá y se ve en el acto, sin reiniciar el viaje: si hubiera que
+   salir a la calle para saber cómo quedó, nadie lo probaría. */
+function pintarVehiculoAjustes() {
+  const cont = $('vehiculoAjustes');
+  if (!cont) return;
+  cont.innerHTML = VEHICULOS.map(([id, nombre]) =>
+    `<button data-veh="${id}" class="${vehiculo === id ? 'on' : ''}">` +
+    `${svgVehiculo(id)}<span>${nombre}</span></button>`).join('');
+  cont.querySelectorAll('button').forEach(el => el.onclick = () => {
+    vehiculo = el.dataset.veh;
+    localStorage.setItem('tt_vehiculo', vehiculo);
+    if (NAV.marker) NAV.marker.setIcon(iconoVehiculo());
+    NAV.rumboPintado = 0;      // el elemento es otro: el giro arranca de cero
+    pintarVehiculoAjustes();
+  });
+}
+
 function pintarEvitarAjustes() {
   $('evitarAjustes').innerHTML = EVITABLES.map(([v, t]) =>
     `<button data-ev="${v}" class="${S.evitar.includes(v) ? 'on' : ''}">${t}</button>`).join('');
@@ -2413,6 +2662,7 @@ const abrirAjustes = () => {
   pintarSelectorVoz();
   pintarEvitarAjustes();
   pintarTemaAjustes();
+  pintarVehiculoAjustes();
   $('rngVel').value = velocidadVoz;
   // La velocidad es de la síntesis de Android: sobre un audio grabado no aplica.
   $('campVel').style.display = paqueteVoz ? 'none' : 'block';

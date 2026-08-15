@@ -307,7 +307,24 @@ test('sin camaras devuelve lista vacia, no explota', () => {
 test('si Overpass falla, el viaje sigue', async () => {
   const fetchRoto = () => Promise.reject(new Error('sin red'));
   const r = await N.buscarCamaras(RUTA, fetchRoto);
-  assert.deepStrictEqual(r, { camaras: [], limites: [] });
+  assert.deepStrictEqual(r, { camaras: [], limites: [], peajes: [] });
+});
+
+test('las cabinas de peaje no se confunden con camaras', async () => {
+  // Las dos cosas son nodos sueltos en OpenStreetMap. Sin mirar los tags,
+  // una cabina de peaje dispararia una alerta de camara de velocidad.
+  const fetchFalso = () => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({ elements: [
+      { type: 'node', lat: -34.60, lon: -58.38, tags: { highway: 'speed_camera' } },
+      { type: 'node', lat: -34.61, lon: -58.39,
+        tags: { barrier: 'toll_booth', name: 'Peaje Hudson' } },
+    ]}),
+  });
+  const r = await N.buscarCamaras(RUTA, fetchFalso);
+  assert.strictEqual(r.camaras.length, 1, 'la cabina se colo entre las camaras');
+  assert.strictEqual(r.peajes.length, 1);
+  assert.strictEqual(r.peajes[0].nombre, 'Peaje Hudson');
 });
 
 test('separa camaras de limites en la respuesta de Overpass', async () => {

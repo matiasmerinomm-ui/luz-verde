@@ -24,6 +24,8 @@ const nuevoEl = (id) => {
     addEventListener(){}, removeEventListener(){}, appendChild(){}, click(){},
     querySelectorAll(){ return []; }, querySelector(){ return null; },
     getElement(){ return null; }, focus(){}, blur(){},
+    setAttribute(){}, getAttribute(){ return null; }, removeAttribute(){},
+    remove(){}, insertAdjacentHTML(){}, scrollIntoView(){},
   };
   el.parentElement = { classList: el.classList };
   el.firstElementChild = { textContent: '' };
@@ -36,6 +38,11 @@ const faltantes = new Set();
 global.document = {
   getElementById(id) { if (!ids.has(id)) faltantes.add(id); return porId(id); },
   createElement: () => nuevoEl('nuevo'),
+  // El <meta name="theme-color"> y cualquier otro selector. Un navegador
+  // siempre tiene querySelector: si el stub no lo tiene, el test falla por
+  // una carencia del stub y no por un problema de la app.
+  querySelector: sel => nuevoEl(sel),
+  querySelectorAll: () => [],
   addEventListener(){}, body: nuevoEl('body'),
   hidden: false,
 };
