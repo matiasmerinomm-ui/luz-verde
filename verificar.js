@@ -992,6 +992,64 @@ test('el buscador no promete cosas en el placeholder', () => {
   assert.ok(!/pegar un link de Maps/.test(html), 'sobra la explicacion');
 });
 
+{
+  const nombreDeEnlace = new Function(
+    js.match(/(function nombreDeEnlace\(url\)[\s\S]*?\n\})/)[1]
+    + '\nreturn nombreDeEnlace;')();
+
+  test('un link de Maps sin coordenadas se resuelve por el nombre', () => {
+    // Los /maps/place/... a veces no traen coordenada: el punto lo resuelve
+    // Google del lado suyo. Pero traen el nombre, y con eso se puede buscar.
+    assert.strictEqual(
+      nombreDeEnlace('https://www.google.com/maps/place/Parrilla+Tentaciones/data=!4m6'),
+      'Parrilla Tentaciones');
+    assert.strictEqual(
+      nombreDeEnlace('https://www.google.com/maps/place/Caf%C3%A9+Tortoni/@-34.6,-58.3'),
+      'Café Tortoni');
+  });
+
+  test('una coordenada disfrazada de nombre no se busca como texto', () => {
+    assert.strictEqual(
+      nombreDeEnlace('https://www.google.com/maps/place/-34.6,-58.4/@-34.6,-58.4,17z'), null);
+    assert.strictEqual(nombreDeEnlace('https://maps.app.goo.gl/abc123'), null);
+    assert.strictEqual(nombreDeEnlace(''), null);
+    assert.strictEqual(nombreDeEnlace(null), null);
+  });
+
+  test('la coordenada tiene prioridad sobre el nombre', () => {
+    const f = js.match(/async function usarUbicacionCompartida[\s\S]*?\n\}/)[0];
+    assert.ok(f.indexOf('expandirEnlaceCorto') < f.indexOf('ubicacionPorNombre'),
+      'buscar el nombre es el ultimo recurso, no el primero');
+  });
+}
+
+test('la ubicacion espera a que el GPS se enganche', () => {
+  // getCurrentPosition devuelve lo primero que tenga: una posicion de red con
+  // cien o doscientos metros de error. Por eso lo ubicaba en otra calle.
+  const f = js.slice(js.indexOf('function mejorPosicion'),
+                     js.indexOf('async function locate'));
+  assert.ok(f.length > 400, 'no se encontro la funcion');
+  assert.ok(/watchPosition/.test(f), 'una sola lectura no alcanza');
+  assert.ok(/maximumAge: 0/.test(f), 'con cache devuelve una posicion vieja');
+  assert.ok(/objetivoM/.test(f), 'sin objetivo de precision no sabe cuando parar');
+  assert.ok(/clearWatch/.test(f), 'quedaria el GPS prendido comiendo bateria');
+  assert.ok(/setTimeout/.test(f), 'adentro de una casa nunca llegaria a la precision');
+});
+
+test('locate ya no acepta una posicion cacheada', () => {
+  const f = js.match(/async function locate\(silent\)[\s\S]*?\n\}/)[0];
+  assert.ok(!/maximumAge: 30000/.test(f), 'volvio el cache de 30 segundos');
+  assert.ok(/mejorPosicion\(\)/.test(f), 'no se pide la lectura buena');
+});
+
+test('los recientes vuelven aunque el campo ya tenga el foco', () => {
+  // Tocar un campo que ya esta enfocado no dispara focus. Pasaba justo despues
+  // de elegir un reciente, que es cuando mas ganas tenes de elegir otro.
+  const f = js.match(/function conectarFocoDestino\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/'focus', abrir/.test(f) && /'click', abrir/.test(f),
+    'hacen falta los dos eventos');
+});
+
 test('no hay bloques de codigo duplicados', () => {
   // Un pegado mal ubicado metio 79 lineas ADENTRO del onclick del boton de voz.
   // Era JavaScript valido, asi que ningun test de carga lo vio: simplemente

@@ -945,7 +945,7 @@ const KEY_EMBEBIDA = '';
 /* Sello de esta versión. Sirve para saber de un vistazo si el teléfono está
    corriendo lo último que subiste o una copia vieja del caché — que es
    imposible de distinguir a ojo y hace perder mucho tiempo. */
-const VERSION_APP = 'lv-0815-f8dfdc';
+const VERSION_APP = 'lv-0815-0a9a4b';
 console.log('Luz Verde ' + VERSION_APP);
 
 /**
@@ -1847,10 +1847,69 @@ function getPosition(opts) {
     navigator.geolocation.getCurrentPosition(res, rej, opts));
 }
 
+/**
+ * La mejor posición que se pueda conseguir en unos segundos.
+ *
+ * `getCurrentPosition` devuelve lo primero que tenga a mano, y lo primero
+ * suele ser una posición de red —antenas y wifi— con cien o doscientos metros
+ * de error. Por eso te ubicaba en una calle que no era: no estaba fallando el
+ * GPS, estaba contestando antes de que el GPS se enganchara.
+ *
+ * Acá se escucha un rato y se va quedando con la lectura más precisa. Corta
+ * apenas llega una lo bastante buena, así que en la calle es casi inmediato;
+ * adentro de una casa se toma los segundos que le hacen falta.
+ */
+function mejorPosicion({ objetivoM = 25, esperaMs = 9000 } = {}) {
+  return new Promise((listo, falla) => {
+    const g = geoNativo();
+    const nav = navigator.geolocation;
+    if (!g && !nav) { falla({ code: 2 }); return; }
+
+    let mejor = null, id = null, reloj = null, terminado = false;
+
+    const cerrar = () => {
+      if (terminado) return true;
+      terminado = true;
+      clearTimeout(reloj);
+      if (id != null) {
+        if (g) llamarPlugin(g, 'clearWatch', { id });
+        else nav.clearWatch(id);
+      }
+      return false;
+    };
+
+    const mirar = pos => {
+      if (!pos || !pos.coords) return;
+      const p = pos.coords.accuracy;
+      if (!mejor || !(mejor.coords.accuracy < p)) mejor = pos;
+      if (p != null && p <= objetivoM) { if (!cerrar()) listo(mejor); }
+    };
+
+    reloj = setTimeout(() => {
+      if (cerrar()) return;
+      mejor ? listo(mejor) : falla({ code: 3, message: 'sin señal' });
+    }, esperaMs);
+
+    const opciones = { enableHighAccuracy: true, timeout: esperaMs, maximumAge: 0 };
+    if (g) {
+      const r = llamarPlugin(g, 'watchPosition', opciones, (pos, err) => {
+        if (err) return;
+        mirar(pos);
+      });
+      if (r && typeof r.then === 'function') r.then(x => { id = x; });
+    } else {
+      id = nav.watchPosition(mirar, () => {}, opciones);
+    }
+  });
+}
+
 async function locate(silent) {
   $('fromInput').value = 'Ubicando…';
   try {
-    const pos = await getPosition({ enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+    // Primero una lectura rápida para no dejar la pantalla vacía, y en
+    // paralelo la buena. Sin permiso, esto ya falla y no seguimos.
+    const pos = await getPosition({ enableHighAccuracy: true, timeout: 12000, maximumAge: 0 })
+      .then(r => mejorPosicion().catch(() => r));
     const { latitude: lat, longitude: lon } = pos.coords;
     S.from = { lat, lon, label: 'Mi ubicación' };
     map.setView([lat, lon], 15);
@@ -1995,7 +2054,12 @@ let buscandoDestino = false;
 function conectarFocoDestino() {
   const inp = $('toInput');
   if (!inp) return;
-  inp.addEventListener('focus', () => { buscandoDestino = true; pintarRecientes(); });
+  const abrir = () => { buscandoDestino = true; pintarRecientes(); };
+  // focus y click: si el campo ya tenía el foco, tocarlo de nuevo no dispara
+  // focus, y la lista no volvía a aparecer. Pasaba justo después de elegir un
+  // reciente, que es cuando más ganas tenés de elegir otro.
+  inp.addEventListener('focus', abrir);
+  inp.addEventListener('click', abrir);
   inp.addEventListener('blur', () => {
     // Con demora: sin ella, el blur esconde la lista antes de que el toque
     // llegue al elemento y el reciente nunca se puede elegir.
@@ -3205,18 +3269,60 @@ async function expandirEnlaceCorto(url) {
   return u;
 }
 
+/**
+ * El nombre del lugar que va adentro de un link de Google Maps.
+ *
+ * Los links de tipo /maps/place/Parrilla+Tentaciones/... a veces no traen
+ * ninguna coordenada: el punto se resuelve del lado de Google. Pero sí traen
+ * el nombre, y con el nombre se puede buscar. Es lo mismo que harías vos:
+ * leer cómo se llama el lugar y escribirlo en el buscador.
+ */
+function nombreDeEnlace(url) {
+  const m = String(url || '').match(/\/maps\/place\/([^\/@?#]+)/);
+  if (!m) return null;
+  let nombre;
+  try { nombre = decodeURIComponent(m[1]); } catch (_) { nombre = m[1]; }
+  nombre = nombre.replace(/\+/g, ' ').trim();
+  // Un nombre que es en realidad una coordenada no sirve para buscar.
+  if (!nombre || /^-?\d+(\.\d+)?,\s*-?\d+/.test(nombre)) return null;
+  return nombre;
+}
+
+/** Último recurso: buscar el lugar por nombre, cerca de donde estás. */
+async function ubicacionPorNombre(url) {
+  const nombre = nombreDeEnlace(url);
+  if (!nombre) return null;
+  try {
+    const res = await search(nombre, S.from);
+    if (!res || !res.length) {
+      diagEnlace = `no encontré "${nombre}"`;
+      return null;
+    }
+    return { lat: res[0].lat, lon: res[0].lon, nombre: res[0].label };
+  } catch (_) {
+    return null;
+  }
+}
+
 /** Toma cualquier texto y, si tiene una ubicación adentro, arma el viaje. */
 async function usarUbicacionCompartida(texto, etiqueta) {
   let u = parsearUbicacion(texto);
 
+  const enlace = (String(texto).match(/https?:\/\/\S+/) || [])[0];
+
   if (!u && esEnlaceCorto(texto)) {
     showMsg('Abriendo el enlace compartido…');
-    u = await expandirEnlaceCorto(texto.match(/https?:\/\/\S+/)[0]);
-    if (!u) {
-      showMsg('No pude leer ese enlace. ' + (diagEnlace || '')
-            + ' Probá abrirlo en el navegador y compartir la dirección.');
-      return false;
-    }
+    u = await expandirEnlaceCorto(enlace);
+  }
+  // Un link de Maps largo con el nombre del lugar pero sin coordenadas.
+  if (!u && enlace && /google\.[^\/]+\/maps/.test(enlace)) {
+    showMsg('Buscando el lugar del enlace…');
+    u = await ubicacionPorNombre(enlace);
+  }
+  if (!u && enlace) {
+    showMsg('No pude leer ese enlace. ' + (diagEnlace || '')
+          + ' Probá abrirlo en el navegador y compartir la dirección.');
+    return false;
   }
   if (!u) return false;
 
