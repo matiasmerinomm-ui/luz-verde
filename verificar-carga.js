@@ -49,38 +49,68 @@ global.document = {
 /**
  * Capacitor de mentira, que se porta como el real.
  *
- * La clave está en `registerPlugin`: Capacitor NUNCA falla al registrar un
- * plugin, aunque no esté instalado. Devuelve un proxy que revienta recién
- * cuando le llamás un método. Por eso una app puede cargar perfecto en el
- * navegador y morir dentro del APK.
+ * Dos cosas que costó caro aprender y que este simulador tiene que respetar:
+ *
+ * 1. `registerPlugin` NO existe en una app sin bundler. Viene del paquete
+ *    @capacitor/core, que hay que empaquetar. Esta app es un HTML suelto, así
+ *    que en el teléfono esa función no está. Lo que Android inyecta es
+ *    `Capacitor.Plugins`. Mientras el simulador ofrecía registerPlugin, todos
+ *    los tests daban verde con la app incapaz de hablar en el celular.
+ *
+ * 2. Un plugin no instalado no falla al pedirlo: falla al usarlo. Devuelve un
+ *    proxy que revienta en la primera llamada a un método.
  */
-function capacitorFalso(instalados) {
+function metodosFalsos() {
   return {
-    isNativePlatform: () => true,
-    Plugins: {},
-    registerPlugin(nombre) {
-      if (instalados.includes(nombre)) {
-        return { addListener: () => ({ remove(){} }),
-                 getLaunchUrl: () => Promise.resolve({ url: null }),
-                 exitApp(){}, get: () => Promise.resolve({ data:'', url:'' }),
-                 getCurrentPosition: () => Promise.resolve({ coords:{latitude:0,longitude:0} }),
-                 watchPosition: () => Promise.resolve('w1'), clearWatch(){},
-                 requestPermissions: () => Promise.resolve({ location:'granted' }) };
-      }
-      // Plugin no instalado: exactamente lo que hace Capacitor de verdad.
-      return new Proxy({}, { get() {
-        return () => { throw new Error('plugin no implementado'); };
-      } });
-    },
+    addListener: () => Promise.resolve({ remove() {} }),
+    removeAllListeners: () => Promise.resolve(),
+    getLaunchUrl: () => Promise.resolve({ url: null }),
+    exitApp() {},
+    get: () => Promise.resolve({ data: '', url: '' }),
+    getCurrentPosition: () => Promise.resolve({ coords: { latitude: 0, longitude: 0 } }),
+    watchPosition: () => Promise.resolve('w1'),
+    clearWatch() {},
+    requestPermissions: () => Promise.resolve({ location: 'granted' }),
+    getSupportedVoices: () => Promise.resolve({ voices: [
+      { name: 'es-us-x-sfb#female_1-local', lang: 'es-US' },
+      { name: 'es-es-x-eed#male_1-local', lang: 'es-ES' },
+      { name: 'en-us-x-tpf-local', lang: 'en-US' },
+    ] }),
+    speak: () => Promise.resolve(),
+    stop: () => Promise.resolve(),
   };
+}
+
+function capacitorFalso(instalados, conRegisterPlugin = false) {
+  const C = {
+    isNativePlatform: () => true,
+    getPlatform: () => 'android',
+    // Tal cual el puente nativo: solo están los plugins realmente instalados.
+    Plugins: Object.fromEntries(instalados.map(n => [n, metodosFalsos()])),
+  };
+  // Solo si la app se empaquetara con un bundler. Hoy no es el caso, pero el
+  // camino sigue en el código y conviene probarlo.
+  if (conRegisterPlugin) {
+    C.registerPlugin = nombre => instalados.includes(nombre)
+      ? metodosFalsos()
+      : new Proxy({}, { get() {
+          return () => { throw new Error('plugin no implementado'); };
+        } });
+  }
+  return C;
 }
 
 const escenario = process.argv[3] || 'web';
 const ENTORNOS = {
   web:      undefined,
   // El caso que rompió la app: dentro del APK, pero sin @capacitor/app.
+  // El APK de verdad: sin registerPlugin, con solo algunos plugins.
   apkPelado: capacitorFalso(['Geolocation']),
-  apkCompleto: capacitorFalso(['Geolocation', 'App', 'CapacitorHttp']),
+  apkCompleto: capacitorFalso(
+    ['Geolocation', 'App', 'CapacitorHttp', 'TextToSpeech']),
+  // Por si algún día se empaqueta con bundler.
+  apkBundler: capacitorFalso(
+    ['Geolocation', 'App', 'CapacitorHttp', 'TextToSpeech'], true),
 };
 /**
  * `window` tiene que tener TODO lo que el navegador pone ahí.
@@ -125,9 +155,45 @@ const bloques = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1
 let n = 0;
 for (const b of bloques) {
   n++;
-  try { (0, eval)(b); }
+  // Al último bloque se le engancha una sonda. Va adentro del mismo eval a
+  // propósito: así ve las variables del módulo, que de afuera son invisibles.
+  const codigo = n === bloques.length
+    ? b + '\n;globalThis.__sonda = () => ({ diagVoz, ttsNativo, voces: vocesEs.length });'
+    : b;
+  try { (0, eval)(codigo); }
   catch (e) { console.log(`\n❌ BLOQUE ${n} FALLA AL CARGAR:\n   ${e.constructor.name}: ${e.message}`);
               if (e.stack) console.log('   ' + e.stack.split('\n')[1] || ''); process.exit(1); }
 }
 if (faltantes.size) console.log('⚠ ids inexistentes:', [...faltantes].join(', '));
-console.log(`✅ [${escenario}] los ${n} bloques cargaron sin errores`);
+
+/**
+ * Cargar sin explotar no alcanza.
+ *
+ * El error más caro que tuvimos no lanzó ninguna excepción: `plugin()` pedía
+ * una función que no existe en el teléfono y devolvía null en silencio, así
+ * que la app arrancaba perfecta y muda. Los tres escenarios daban verde.
+ *
+ * Por eso, además de que cargue, se mira el resultado: en un APK con el plugin
+ * de voz instalado, la app TIENE que haber conseguido las voces.
+ */
+setTimeout(() => {
+  const esperado = escenario.startsWith('apk')
+                && ENTORNOS[escenario].Plugins.TextToSpeech;
+  if (esperado) {
+    const d = globalThis.__sonda ? globalThis.__sonda() : null;
+    if (!d || !d.ttsNativo) {
+      console.log(`\n❌ [${escenario}] la app cargó pero no consiguió la voz.`);
+      console.log('   diagnóstico:', d ? d.diagVoz : 'sin sonda');
+      console.log('   El plugin está instalado en este escenario: si la app no'
+                + ' lo encuentra,\n   en el teléfono va a estar muda igual que'
+                + ' antes.');
+      process.exit(1);
+    }
+    if (d.voces < 1) {
+      console.log(`\n❌ [${escenario}] no quedó ninguna voz para elegir.`);
+      process.exit(1);
+    }
+    console.log(`   voz: ${d.diagVoz}`);
+  }
+  console.log(`✅ [${escenario}] los ${n} bloques cargaron sin errores`);
+}, 30);

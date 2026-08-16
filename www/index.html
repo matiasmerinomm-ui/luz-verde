@@ -88,6 +88,9 @@ button,input{font-family:inherit;font-size:16px}
 #sug{position:absolute;left:12px;right:12px;background:var(--card);
   border:1px solid var(--line);border-radius:12px;overflow:hidden;z-index:1200;
   box-shadow:0 14px 34px rgba(15,35,24,.16);max-height:52vh;overflow-y:auto}
+#recientes{position:absolute;left:12px;right:12px;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;overflow:hidden;z-index:1150;
+  box-shadow:0 14px 34px rgba(15,35,24,.16);max-height:52vh;overflow-y:auto}
 #sug div{padding:13px 14px;border-bottom:1px solid var(--line)}
 #sug div:last-child{border:0}
 #sug b{display:block;font-weight:600;font-size:14.5px}
@@ -448,11 +451,15 @@ body.navegando #btnVoz{top:auto;bottom:150px}
   </div>
   <div class="inputrow">
     <i class="dot" style="background:#ef4444"></i>
-    <input id="toInput" placeholder="¿A dónde vas? Podés pegar un link de Maps" autocomplete="off">
+    <input id="toInput" placeholder="¿A dónde vas?" autocomplete="off">
     <button class="iconbtn hidden" id="clearBtn">✕</button>
   </div>
   <div id="modos"></div>
   <div id="sug" class="hidden"></div>
+  <!-- Los recientes cuelgan del buscador, como en cualquier app de mapas:
+       aparecen al tocar el campo y desaparecen al elegir. Abajo de todo, en
+       cambio, eran una lista vieja ocupando pantalla sin que nadie la pida. -->
+  <div id="recientes" class="hidden"></div>
 </div>
 
 <div id="msg" class="hidden"></div>
@@ -468,7 +475,6 @@ body.navegando #btnVoz{top:auto;bottom:150px}
   <button class="grab" id="grab" aria-label="Plegar o desplegar el panel"><i></i></button>
   <div id="hint">
     <div id="lugares"></div>
-    <div id="recientes"></div>
     <p id="hintTexto">Escribí una dirección o tocá un acceso rápido.</p>
   </div>
   <div id="result" class="hidden"></div>
@@ -515,8 +521,7 @@ body.navegando #btnVoz{top:auto;bottom:150px}
     <div class="when evitar" id="evitarAjustes"></div>
     <p class="ayuda">Por defecto no se evita nada: la ruta más rápida es la más
       rápida. Encendé lo que quieras esquivar y se aplica a todos los cálculos.
-      <br><br>TomTom no permite evitar cruces ferroviarios ni zonas peligrosas:
-      eso en otras apps sale de reportes de sus usuarios, no del motor de ruteo.</p>
+</p>
 
     <button class="btn" id="cerrarAjustes">Listo</button>
 
@@ -940,7 +945,7 @@ const KEY_EMBEBIDA = '';
 /* Sello de esta versión. Sirve para saber de un vistazo si el teléfono está
    corriendo lo último que subiste o una copia vieja del caché — que es
    imposible de distinguir a ojo y hace perder mucho tiempo. */
-const VERSION_APP = 'lv-0815-d8b741';
+const VERSION_APP = 'lv-0815-f8dfdc';
 console.log('Luz Verde ' + VERSION_APP);
 
 /**
@@ -984,8 +989,33 @@ const EVITABLES = [
  */
 function plugin(nombre) {
   const C = window.Capacitor;
-  if (!C || typeof C.registerPlugin !== 'function') return null;
-  try { return C.registerPlugin(nombre) || null; } catch (_) { return null; }
+  if (!C) return null;
+
+  /* Este era el error de fondo, y explicaba casi todo lo que fallaba adentro
+     del APK: la voz muda, el enlace de WhatsApp que abría la app sin cargar
+     nada, y el botón atrás que no cerraba.
+
+     `registerPlugin` NO viene del teléfono: viene del paquete @capacitor/core,
+     que hay que empaquetar con un bundler. Esta app es un HTML suelto, sin
+     bundler, así que esa función nunca existió acá. Lo que sí inyecta Android
+     al abrir el WebView es `Capacitor.Plugins`, un proxy que habla con el
+     puente nativo directamente.
+
+     Como `plugin()` pedía primero `registerPlugin` y devolvía null si no
+     estaba, TODOS los plugins quedaban descartados de entrada — incluso los
+     que estaban perfectamente instalados. Por eso el diagnóstico decía "estás
+     en un navegador" adentro de un teléfono.
+
+     Ahora se prueba primero lo que existe sin bundler. */
+  try {
+    const p = C.Plugins && C.Plugins[nombre];
+    if (p) return p;
+  } catch (_) { /* el proxy puede tirar para un plugin que no está */ }
+
+  if (typeof C.registerPlugin === 'function') {
+    try { return C.registerPlugin(nombre) || null; } catch (_) { return null; }
+  }
+  return null;
 }
 
 /** Llama un método de plugin. Devuelve null si no existe o si revienta. */
@@ -1725,13 +1755,14 @@ function scheduleRefresh() {
    Autocompletado
    ============================================================ */
 const doSuggest = debounce(async (q, which) => {
-  if (q.length < 3) return $('sug').classList.add('hidden');
+  if (q.length < 3) { $('sug').classList.add('hidden'); pintarRecientes(); return; }
   try {
     const res = await search(q, S.from || { lat: map.getCenter().lat, lon: map.getCenter().lng });
-    if (!res.length) return $('sug').classList.add('hidden');
+    if (!res.length) { $('sug').classList.add('hidden'); pintarRecientes(); return; }
     $('sug').innerHTML = res.map((r, i) =>
       `<div data-i="${i}"><b>${r.label}</b><span>${r.detail}</span></div>`).join('');
     $('sug').classList.remove('hidden');
+    pintarRecientes();               // se esconde sola: mandan las sugerencias
     $('sug').querySelectorAll('div[data-i]').forEach(el => el.onclick = () => {
       const pick = res[+el.dataset.i];
       if (which === 'to') { S.to = pick; $('toInput').value = pick.label; }
@@ -1761,7 +1792,10 @@ $('clearBtn').onclick = () => {
 };
 
 document.addEventListener('click', e => {
-  if (!e.target.closest('#sug') && !e.target.closest('.inputrow')) $('sug').classList.add('hidden');
+  if (!e.target.closest('#sug') && !e.target.closest('#recientes')
+      && !e.target.closest('.inputrow')) {
+    $('sug').classList.add('hidden');
+  }
 });
 
 /* ============================================================
@@ -1866,6 +1900,8 @@ function irA(destino) {
   $('toInput').value = destino.label;
   $('clearBtn').classList.remove('hidden');
   $('sug').classList.add('hidden');
+  buscandoDestino = false;
+  pintarRecientes();
   if (!S.from) locate(false);
   else route();
 }
@@ -1971,8 +2007,17 @@ function conectarFocoDestino() {
 function pintarRecientes() {
   const cont = $('recientes');
   if (!cont) return;
-  if (!recientes.length || !buscandoDestino) { cont.innerHTML = ''; return; }
-  cont.innerHTML = '<div class="sechead">Recientes</div>' + recientes.map((r, i) =>
+  // Con sugerencias de búsqueda en pantalla mandan ellas: dos listas
+  // superpuestas colgando del mismo campo no se entienden.
+  const tapado = !$('sug').classList.contains('hidden');
+  if (!recientes.length || !buscandoDestino || tapado) {
+    cont.classList.add('hidden');
+    cont.innerHTML = '';
+    return;
+  }
+  cont.classList.remove('hidden');
+  cont.innerHTML = '<div class="sechead" style="padding:11px 14px 4px;margin:0">Recientes</div>'
+    + recientes.map((r, i) =>
     `<div class="rec" data-i="${i}">
        <span class="reloj">🕘</span>
        <span class="txt"><span class="t1">${r.label}</span></span>
@@ -2306,8 +2351,12 @@ let diagVoz = 'sin consultar';
 
 /** Le pregunta a Android qué voces tiene, guardando el motivo si falla. */
 function cargarVocesNativas() {
-  if (!TTS) { diagVoz = 'sin puente de Capacitor (estás en un navegador)';
-              ttsRevisado = true; return; }
+  if (!TTS) {
+    diagVoz = window.Capacitor
+      ? 'el plugin TextToSpeech no está instalado en este APK'
+      : 'sin puente de Capacitor (estás en un navegador)';
+    ttsRevisado = true; return;
+  }
   if (typeof TTS.getSupportedVoices !== 'function') {
     diagVoz = 'el plugin TextToSpeech no expone getSupportedVoices';
     ttsRevisado = true; return;
@@ -3131,7 +3180,9 @@ async function expandirEnlaceCorto(url) {
   // Google no deja leer su respuesta.
   const http = plugin('CapacitorHttp');
   if (!http || typeof http.get !== 'function') {
-    diagEnlace = 'sin puente nativo para seguir el enlace';
+    diagEnlace = window.Capacitor
+      ? 'el puente nativo no expone CapacitorHttp'
+      : 'sin puente nativo (en la computadora Google no deja leer el enlace)';
     return null;
   }
   let r;
@@ -3257,7 +3308,10 @@ function retroceder() {
 (function conectarAtras() {
   const app = plugin('App');
   const enganchado = llamarPlugin(app, 'addListener', 'backButton', () => {
-    if (!retroceder()) llamarPlugin(app, 'exitApp');
+    if (retroceder()) return;
+    // Nada que deshacer: que se cierre de verdad. Si el plugin no contesta,
+    // al menos soltamos el historial en vez de dejar la app atrapada.
+    if (!llamarPlugin(app, 'exitApp')) history.back();
   });
   if (enganchado) return;
 

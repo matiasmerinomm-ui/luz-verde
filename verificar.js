@@ -943,6 +943,55 @@ test('los recientes aparecen al buscar destino, no antes', () => {
     'sin demora en el blur, el toque nunca llega al reciente elegido');
 });
 
+test('los plugins se piden por donde el puente los expone', () => {
+  // La causa de fondo de casi todo lo que fallaba adentro del APK.
+  // `registerPlugin` viene de @capacitor/core, que necesita un bundler; esta
+  // app es un HTML suelto y no lo tiene, asi que esa funcion nunca existio.
+  // Pidiendola primero, TODOS los plugins quedaban descartados: la voz muda,
+  // el enlace de WhatsApp sin efecto y el boton atras sin salida.
+  const f = js.match(/function plugin\(nombre\)[\s\S]*?\n\}/)[0];
+  const porPlugins = f.indexOf('C.Plugins');
+  const porRegistrar = f.indexOf('C.registerPlugin');
+  assert.ok(porPlugins > 0, 'no se usa Capacitor.Plugins, que es lo que inyecta Android');
+  assert.ok(porRegistrar > 0, 'se pierde el camino con bundler');
+  assert.ok(porPlugins < porRegistrar,
+    'registerPlugin primero descarta plugins que si estan instalados');
+});
+
+test('el diagnostico distingue no-hay-Capacitor de no-esta-el-plugin', () => {
+  const f = js.match(/function cargarVocesNativas\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/window\.Capacitor\s*\n?\s*\?/.test(f) || /window\.Capacitor$/m.test(f),
+    'son dos problemas distintos y el mensaje tiene que separarlos');
+});
+
+test('el boton atras siempre tiene salida', () => {
+  const f = js.slice(js.indexOf('function conectarAtras'), js.indexOf('function start()'));
+  assert.ok(/exitApp/.test(f), 'sin exitApp la app queda atrapada');
+  assert.ok(/history\.back\(\)/.test(f),
+    'si el plugin no contesta hay que soltar el historial igual');
+});
+
+test('los recientes cuelgan del buscador, no del panel de abajo', () => {
+  const i = html.indexOf('id="recientes"');
+  const sug = html.indexOf('id="sug"');
+  const panel = html.indexOf('<div id="panel">');
+  assert.ok(i > sug && i < panel,
+    'los recientes tienen que estar al lado de las sugerencias, arriba');
+  assert.ok(/#recientes\{position:absolute/.test(html),
+    'sin position:absolute no cuelga del campo, empuja el contenido');
+});
+
+test('recientes y sugerencias no se superponen', () => {
+  const f = js.match(/function pintarRecientes\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/sug'\)\.classList\.contains\('hidden'\)/.test(f),
+    'dos listas colgando del mismo campo se pisan');
+});
+
+test('el buscador no promete cosas en el placeholder', () => {
+  assert.ok(/placeholder="¿A dónde vas\?"/.test(html), 'el placeholder cambio');
+  assert.ok(!/pegar un link de Maps/.test(html), 'sobra la explicacion');
+});
+
 test('no hay bloques de codigo duplicados', () => {
   // Un pegado mal ubicado metio 79 lineas ADENTRO del onclick del boton de voz.
   // Era JavaScript valido, asi que ningun test de carga lo vio: simplemente
