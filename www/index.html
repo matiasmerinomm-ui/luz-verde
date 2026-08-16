@@ -150,6 +150,13 @@ body.navegando #btnMenu{display:none}
   color:var(--txt);font-size:19px;line-height:1;box-shadow:0 4px 14px rgba(15,35,24,.18)}
 #btnTema{top:10px}
 #btnVoz{top:60px}
+/* Centrar: solo existe navegando, y solo cuando hace falta — si la cámara ya
+   te está siguiendo, el botón sería un adorno que tapa mapa. */
+#btnCentrar{position:absolute;right:10px;bottom:210px;z-index:600;
+  width:52px;height:52px;border-radius:50%;border:1px solid var(--line);
+  background:var(--flotante);color:var(--verde);font-size:24px;line-height:1;
+  box-shadow:0 6px 18px rgba(15,35,24,.28);animation:aparecer .18s ease both}
+@keyframes aparecer{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
 .leaflet-control-attribution{display:none!important}
 .leaflet-control-attribution a{color:#8b95a6!important}
 .leaflet-bar a{background:var(--card)!important;color:var(--txt)!important;
@@ -467,6 +474,7 @@ body.navegando #btnVoz{top:auto;bottom:150px}
   <div id="map"></div>
   <button id="btnMenu" title="Menú">☰</button>
   <button id="btnTema" title="Cambiar entre mapa claro y oscuro">☀</button>
+  <button id="btnCentrar" class="hidden" title="Volver a mi posición">◎</button>
   <button id="btnVoz" title="Modo de voz · mantené pulsado para elegir voz">🔊</button>
 
 </div>
@@ -945,7 +953,7 @@ const KEY_EMBEBIDA = '';
 /* Sello de esta versión. Sirve para saber de un vistazo si el teléfono está
    corriendo lo último que subiste o una copia vieja del caché — que es
    imposible de distinguir a ojo y hace perder mucho tiempo. */
-const VERSION_APP = 'lv-0815-0a9a4b';
+const VERSION_APP = 'lv-0815-8cf154';
 console.log('Luz Verde ' + VERSION_APP);
 
 /**
@@ -1376,11 +1384,16 @@ function clasificarDemora(seccion, puntos) {
 }
 
 function draw() {
+  // Sin ruta no hay nada que dibujar. Parece obvio, pero esto llegaba desde
+  // una promesa de Overpass que respondía después de que el usuario borró el
+  // destino: la ruta ya no existía y la app moría con "reading 'points'".
   S.layers.forEach(l => map.removeLayer(l));
   S.markers.forEach(m => map.removeLayer(m));
   S.layers = []; S.markers = [];
 
   const T = TEMAS[temaActual] || TEMAS.oscuro;
+  const rutaActual = S.routes[S.picked];
+  if (!rutaActual) { pintarMiUbicacion(); return; }
 
   // Alternativas primero, apagadas, para que la elegida quede arriba.
   S.routes.forEach((r, i) => {
@@ -1571,6 +1584,51 @@ async function destinoDesdeMapa(lat, lon) {
   } catch (_) { $('toInput').value = punto.label; }
 }
 
+/* ---------------------------------------------------------------------------
+   Cámara durante el viaje
+   ---------------------------------------------------------------------------
+   Mientras la cámara te sigue, el botón de centrar no aparece. Apenas movés el
+   mapa con el dedo, la cámara suelta y el botón aparece para volver. Es el
+   mismo trato que hace cualquier app de navegación: si querés mirar dos
+   cuadras más adelante, el mapa te deja.
+   ------------------------------------------------------------------------ */
+function soltarCamara() {
+  if (!NAV.on || NAV.libre) return;
+  NAV.libre = true;
+  $('btnCentrar').classList.remove('hidden');
+}
+
+function centrarEnMi() {
+  NAV.libre = false;
+  $('btnCentrar').classList.add('hidden');
+  const p = NAV.ultima || (S.from && [S.from.lat, S.from.lon]);
+  if (!p) return;
+  NAV.zoomPintado = zoomPorVelocidad(NAV.velKmh);
+  map.setView(p, NAV.zoomPintado, { animate: true, duration: .5 });
+}
+
+function conectarCamara() {
+  $('btnCentrar').onclick = centrarEnMi;
+  // dragstart y no click: el zoom con dos dedos o el doble toque también son
+  // formas de decir "quiero mirar otra cosa".
+  // dragstart es de Leaflet y solo dispara con un arrastre real. El zoom NO se
+  // escucha por 'zoomstart': ese evento también salta cuando la cámara se
+  // mueve sola, y la app se soltaría a sí misma en cada acercamiento.
+  map.on('dragstart', soltarCamara);
+  const cont = map.getContainer && map.getContainer();
+  if (cont && cont.addEventListener) {
+    // Pellizco para hacer zoom: dos dedos son inequívocamente tuyos.
+    cont.addEventListener('touchstart', e => {
+      if (e.touches && e.touches.length > 1) soltarCamara();
+    }, { passive: true });
+    cont.addEventListener('click', e => {
+      if (e.target && e.target.closest && e.target.closest('.leaflet-control-zoom')) {
+        soltarCamara();
+      }
+    });
+  }
+}
+
 function conectarToquesDelMapa() {
   map.on('click', e => {
     if (NAV.on) return;
@@ -1608,6 +1666,32 @@ function refresh() {
  * La lista viene ordenada por metro del recorrido, así que alcanza con
  * quedarse con la primera de cada grupo separado por menos de `juntasM`.
  */
+/**
+ * Se queda con las cabinas que caen adentro del tramo que TomTom cobra.
+ *
+ * Esta es la parte que faltaba y la razón de que siguieran apareciendo peajes
+ * ajenos. Filtrar por cercanía a la ruta no alcanza: en un nudo vial la
+ * cabina de otra autopista pasa a treinta metros de la nuestra, y sobre el
+ * mapa las dos calles están una encima de la otra.
+ *
+ * TomTom sí sabe qué parte del recorrido es tarifada — la informa como tramo
+ * TOLL_ROAD. Una cabina que no cae adentro de ninguno de esos tramos no es
+ * nuestra, por más cerca que pase. Y si TomTom dice que la ruta no tiene
+ * peaje, no hay ninguna cabina que mostrar.
+ */
+function peajesDelTramo(peajes, tramos, acc) {
+  if (!tramos || !tramos.length) return [];
+  const rangos = tramos.map(t => {
+    const i = Math.max(0, Math.min(t.startPointIndex, acc.length - 1));
+    const f = Math.max(0, Math.min(t.endPointIndex, acc.length - 1));
+    // El margen es asimétrico a propósito: la cabina está antes de que empiece
+    // a cobrar, casi nunca después de que dejó de cobrar.
+    return [acc[Math.min(i, f)] - 500, acc[Math.max(i, f)] + 150];
+  });
+  return peajes.filter(pj =>
+    rangos.some(([a, b]) => pj.offset >= a && pj.offset <= b));
+}
+
 function agruparPeajes(lista, juntasM = 700) {
   const salida = [];
   for (const pj of lista) {
@@ -1635,8 +1719,9 @@ function asegurarPeajes() {
     if (clave !== S.peajesClave) return;
     // 30 m: la colectora corre a unos 40 m de la autopista, así que con
     // cualquier margen más ancho entraban cabinas que no vas a cruzar.
-    S.peajes = agruparPeajes(
-      camarasSobreRuta(res.peajes || [], r.points, acumulados(r.points), 30));
+    const acc = acumulados(r.points);
+    S.peajes = agruparPeajes(peajesDelTramo(
+      camarasSobreRuta(res.peajes || [], r.points, acc, 30), r.tramosPeaje, acc));
     if (S.peajes.length) draw();
   });
 }
@@ -1653,6 +1738,7 @@ function renderLoading() {
 
 function render() {
   const r = S.routes[S.picked];
+  if (!r || !S.to) return;          // se borró el destino mientras calculaba
   const d = fmtDur(r.seconds);
   const arrival = r.arrival || new Date(Date.now() + (S.departIn * 60 + r.seconds) * 1000);
   const delayMin = Math.round(r.delay / 60);
@@ -1859,7 +1945,7 @@ function getPosition(opts) {
  * apenas llega una lo bastante buena, así que en la calle es casi inmediato;
  * adentro de una casa se toma los segundos que le hacen falta.
  */
-function mejorPosicion({ objetivoM = 25, esperaMs = 9000 } = {}) {
+function mejorPosicion({ objetivoM = 30, esperaMs = 7000, alMejorar = null } = {}) {
   return new Promise((listo, falla) => {
     const g = geoNativo();
     const nav = navigator.geolocation;
@@ -1881,7 +1967,12 @@ function mejorPosicion({ objetivoM = 25, esperaMs = 9000 } = {}) {
     const mirar = pos => {
       if (!pos || !pos.coords) return;
       const p = pos.coords.accuracy;
-      if (!mejor || !(mejor.coords.accuracy < p)) mejor = pos;
+      if (mejor && mejor.coords.accuracy < p) return;   // peor que la que ya hay
+      mejor = pos;
+      // Cada mejora se avisa en el acto: la pantalla se actualiza con la
+      // primera lectura y se va corrigiendo sola. Nadie espera mirando
+      // "Ubicando…" a que llegue la perfecta.
+      if (alMejorar) { try { alMejorar(pos); } catch (_) {} }
       if (p != null && p <= objetivoM) { if (!cerrar()) listo(mejor); }
     };
 
@@ -1906,10 +1997,18 @@ function mejorPosicion({ objetivoM = 25, esperaMs = 9000 } = {}) {
 async function locate(silent) {
   $('fromInput').value = 'Ubicando…';
   try {
-    // Primero una lectura rápida para no dejar la pantalla vacía, y en
-    // paralelo la buena. Sin permiso, esto ya falla y no seguimos.
-    const pos = await getPosition({ enableHighAccuracy: true, timeout: 12000, maximumAge: 0 })
-      .then(r => mejorPosicion().catch(() => r));
+    // Una sola escucha, que pinta apenas llega la primera lectura y después
+    // se corrige sola. Encadenar dos consultas, como estaba antes, sumaba los
+    // dos tiempos de espera y por eso tardaba tanto.
+    let primera = true;
+    const pos = await mejorPosicion({
+      alMejorar: p => {
+        S.from = { lat: p.coords.latitude, lon: p.coords.longitude,
+                   label: S.from ? S.from.label : 'Mi ubicación' };
+        pintarMiUbicacion();
+        if (primera) { primera = false; map.setView([S.from.lat, S.from.lon], 16); }
+      },
+    });
     const { latitude: lat, longitude: lon } = pos.coords;
     S.from = { lat, lon, label: 'Mi ubicación' };
     map.setView([lat, lon], 15);
@@ -1961,6 +2060,9 @@ function irA(destino) {
   $('sug').classList.add('hidden');
   buscandoDestino = false;
   pintarRecientes();
+  // Soltar el foco además de esconder la lista: si el campo lo conserva, el
+  // primer toque en cualquier lado la vuelve a abrir.
+  try { $('toInput').blur(); } catch (_) {}
   if (!S.from) locate(false);
   else route();
 }
@@ -2128,6 +2230,8 @@ const NAV = {
   ultimoAvisoExceso: 0, limitePintado: null,
   marker: null, wake: null, velKmh: 0, ultimaVoz: 0,
   rumboPintado: 0, zoomPintado: null,
+  libre: false,        // el usuario movió el mapa: la cámara deja de seguirlo
+  ultima: null,        // última posición conocida, para el botón de centrar
   /* Velocidad de referencia en m/s para estimar cuánto falta hasta la próxima
      maniobra. Arranca con la media de la ruta y se va corrigiendo con lo que
      realmente vas manejando. No se usa la velocidad instantánea: parado en un
@@ -2710,8 +2814,9 @@ function cargarRutaEnNav(r) {
   buscarCamaras(r.points).then(res => {
     NAV.camaras = camarasSobreRuta(res.camaras || [], NAV.puntos, NAV.acc);
     NAV.limites = limitesSobreRuta(res.limites || [], NAV.puntos, NAV.acc);
-    NAV.peajes = agruparPeajes(
-      camarasSobreRuta(res.peajes || [], NAV.puntos, NAV.acc, 30));
+    NAV.peajes = agruparPeajes(peajesDelTramo(
+      camarasSobreRuta(res.peajes || [], NAV.puntos, NAV.acc, 30),
+      (S.routes[S.picked] || {}).tramosPeaje, NAV.acc));
   });
 }
 
@@ -2735,8 +2840,12 @@ function iniciarViaje() {
     draw();
     const inicio = NAV.puntos[0];
     NAV.rumboPintado = rumbo(NAV.puntos[0], NAV.puntos[Math.min(6, NAV.puntos.length - 1)]);
-    NAV.zoomPintado = 17;
-    map.flyTo(inicio, 17, { duration: 1.25, easeLinearity: .25 });
+    // Zoom de una, sin animar. Animado quedaba a medio camino: la animación
+    // del zoom se cortaba con el primer panTo del GPS —que llega enseguida— y
+    // el mapa se quedaba mostrando media provincia.
+    NAV.zoomPintado = zoomPorVelocidad(0);
+    NAV.libre = false;
+    map.setView(inicio, NAV.zoomPintado, { animate: false });
     pintarNav(inicio, NAV.rumboPintado,
               { idx: 0, metros: 0, t: 0 }, 0, NAV.total);
   });
@@ -2750,6 +2859,9 @@ function iniciarViaje() {
 
 function terminarViaje(mensaje) {
   NAV.on = false;
+  NAV.libre = false;
+  NAV.ultima = null;
+  $('btnCentrar').classList.add('hidden');
 
   const g = geoNativo();
   if (NAV.watchId != null) {
@@ -2885,6 +2997,7 @@ function tiempoHasta(metros) {
 }
 
 function pintarNav(p, rumboGps, u, hecho, resta) {
+  NAV.ultima = p;
   // Flecha del vehículo, orientada al rumbo del GPS o, si no lo informa, a la
   // dirección del tramo que está recorriendo.
   const rot = rumboGps != null
@@ -2912,12 +3025,16 @@ function pintarNav(p, rumboGps, u, hecho, resta) {
 
   // Cámara suave. El zoom solo se toca cuando cambia de escalón, si no el mapa
   // vibra en cada lectura del GPS.
-  const z = zoomPorVelocidad(NAV.velKmh);
-  if (z !== NAV.zoomPintado) {
-    NAV.zoomPintado = z;
-    map.flyTo(p, z, { duration: 1.1, easeLinearity: .3 });
-  } else {
-    map.panTo(p, { animate: true, duration: .95, easeLinearity: 1 });
+  // Si moviste el mapa con el dedo, la cámara te deja mirar: seguir centrando
+  // sería arrebatarte el mapa cada segundo. Vuelve con el botón de centrar.
+  if (!NAV.libre) {
+    const z = zoomPorVelocidad(NAV.velKmh);
+    if (z !== NAV.zoomPintado) {
+      NAV.zoomPintado = z;
+      map.setView(p, z, { animate: true, duration: .6 });
+    } else {
+      map.panTo(p, { animate: true, duration: .95, easeLinearity: 1 });
+    }
   }
 
   const i = pasoActual(NAV.pasos, hecho);
@@ -3433,6 +3550,7 @@ function start() {
   activarManija();
   conectarFocoDestino();
   conectarToquesDelMapa();
+  conectarCamara();
   locate(true);
   setTimeout(() => map.invalidateSize(), 200);
 }

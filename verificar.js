@@ -1039,7 +1039,7 @@ test('la ubicacion espera a que el GPS se enganche', () => {
 test('locate ya no acepta una posicion cacheada', () => {
   const f = js.match(/async function locate\(silent\)[\s\S]*?\n\}/)[0];
   assert.ok(!/maximumAge: 30000/.test(f), 'volvio el cache de 30 segundos');
-  assert.ok(/mejorPosicion\(\)/.test(f), 'no se pide la lectura buena');
+  assert.ok(/mejorPosicion\(\{/.test(f), 'no se pide la lectura buena');
 });
 
 test('los recientes vuelven aunque el campo ya tenga el foco', () => {
@@ -1048,6 +1048,92 @@ test('los recientes vuelven aunque el campo ya tenga el foco', () => {
   const f = js.match(/function conectarFocoDestino\(\)[\s\S]*?\n\}/)[0];
   assert.ok(/'focus', abrir/.test(f) && /'click', abrir/.test(f),
     'hacen falta los dos eventos');
+});
+
+test('dibujar sin ruta no revienta', () => {
+  // Llegaba desde una promesa de Overpass que contestaba despues de que el
+  // usuario borro el destino: la app moria con "reading 'points'".
+  const f = js.match(/function draw\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/const rutaActual = S\.routes\[S\.picked\];\n  if \(!rutaActual\)/.test(f),
+    'falta la guarda al principio de draw');
+  const g = js.match(/function render\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/if \(!r \|\| !S\.to\) return;/.test(g), 'falta la guarda en render');
+});
+
+{
+  const acc = Array.from({ length: 26 }, (_, i) => i * 400);   // 0 a 10 km
+  const peajesDelTramo = new Function(
+    js.match(/(function peajesDelTramo[\s\S]*?\n\})/)[1] + '\nreturn peajesDelTramo;')();
+
+  test('solo cuentan los peajes del tramo que TomTom cobra', () => {
+    // Filtrar por cercania no alcanza: en un nudo vial la cabina de otra
+    // autopista pasa a treinta metros de la nuestra.
+    const tramos = [{ startPointIndex: 10, endPointIndex: 15 }];   // 4 a 6 km
+    const r = peajesDelTramo(
+      [{ offset: 800 }, { offset: 5000 }, { offset: 9200 }], tramos, acc);
+    assert.deepStrictEqual(r.map(p => p.offset), [5000],
+      'entraron cabinas de tramos que TomTom no cobra');
+  });
+
+  test('la cabina justo antes del tramo tarifado tambien cuenta', () => {
+    // Se cobra al entrar: la cabina esta unos metros antes de que empiece.
+    const tramos = [{ startPointIndex: 10, endPointIndex: 15 }];   // desde 4 km
+    const r = peajesDelTramo([{ offset: 3700 }], tramos, acc);
+    assert.strictEqual(r.length, 1, 'quedo afuera por el margen de entrada');
+  });
+
+  test('sin tramo tarifado no hay ningun peaje que mostrar', () => {
+    assert.deepStrictEqual(peajesDelTramo([{ offset: 5000 }], [], acc), []);
+    assert.deepStrictEqual(peajesDelTramo([{ offset: 5000 }], null, acc), []);
+  });
+
+  test('un tramo con los indices al reves no se descarta', () => {
+    const r = peajesDelTramo([{ offset: 5000 }],
+                             [{ startPointIndex: 15, endPointIndex: 10 }], acc);
+    assert.strictEqual(r.length, 1);
+  });
+}
+
+test('la ubicacion se pinta apenas llega y despues se corrige', () => {
+  // Encadenar dos consultas sumaba los dos tiempos de espera. Por eso tardaba.
+  const f = js.slice(js.indexOf('function mejorPosicion'), js.indexOf('async function locate'));
+  assert.ok(/alMejorar/.test(f), 'sin aviso progresivo hay que esperar la mejor');
+  const l = js.match(/async function locate\(silent\)[\s\S]*?\n\}/)[0];
+  assert.ok(!/getPosition\(/.test(l), 'volvio la consulta encadenada');
+  assert.ok(/alMejorar: p =>/.test(l), 'locate no aprovecha las lecturas parciales');
+});
+
+test('el zoom al arrancar el viaje no se anima', () => {
+  // Animado quedaba a medio camino: el primer panTo del GPS cortaba la
+  // animacion y el mapa se quedaba mostrando media provincia.
+  const i = js.indexOf('NAV.zoomPintado = zoomPorVelocidad(0);');
+  assert.ok(i > 0, 'no se fija el zoom inicial segun la velocidad');
+  assert.ok(/map\.setView\(inicio, NAV\.zoomPintado, \{ animate: false \}\)/.test(js),
+    'el encuadre inicial sigue animado');
+});
+
+test('la camara suelta con el dedo y vuelve con el boton', () => {
+  const f = js.match(/function conectarCamara\(\)[\s\S]*?\n\}/)[0];
+  assert.ok(/map\.on\('dragstart', soltarCamara\)/.test(f), 'arrastrar no suelta');
+  assert.ok(!/map\.on\('zoomstart'/.test(f),
+    'zoomstart salta tambien con el zoom automatico: la app se soltaria sola');
+  assert.ok(/btnCentrar'\)\.onclick = centrarEnMi/.test(f), 'el boton no hace nada');
+  const g = js.match(/function pintarNav\(p, rumboGps, u, hecho, resta\)[\s\S]*?\n\}/)[0];
+  assert.ok(/if \(!NAV\.libre\)/.test(g), 'la camara sigue arrebatando el mapa');
+});
+
+test('el boton de centrar existe y arranca escondido', () => {
+  assert.ok(/id="btnCentrar" class="hidden"/.test(html),
+    'si la camara ya te sigue, el boton solo tapa mapa');
+  const f = js.match(/function terminarViaje\(mensaje\)[\s\S]*?\n\}/)[0];
+  assert.ok(/btnCentrar'\)\.classList\.add\('hidden'\)/.test(f),
+    'queda flotando despues de terminar el viaje');
+});
+
+test('elegir destino saca el foco del buscador', () => {
+  const f = js.match(/function irA\(destino\)[\s\S]*?\n\}/)[0];
+  assert.ok(/toInput'\)\.blur\(\)/.test(f),
+    'con el foco puesto, el primer toque en cualquier lado reabre los recientes');
 });
 
 test('no hay bloques de codigo duplicados', () => {
